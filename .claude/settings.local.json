@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(ls -la docs/)",
+      "Bash(ls -la design-artifacts/)",
+      "Bash(ls -la tests/)",
+      "Bash(ls -la _bmad/)",
+      "Bash(ls -la _bmad-output/)"
+    ]
+  }
+}
