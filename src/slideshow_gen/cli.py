@@ -52,6 +52,7 @@ def cli():
     help="Directory for temp files. Default: system temp. Use for large renders.",
 )
 @click.option("--chunk-duration", type=int, default=None, help="Split output into chunks of N minutes (e.g. 60).")
+@click.option("--recursive", "-r", is_flag=True, help="Recursively scan subdirectories for media files.")
 @click.option("--dry-run", is_flag=True, help="Print manifest without rendering.")
 @click.option("--keep-temp", is_flag=True, help="Keep temp directory after render for debugging.")
 @click.option("--verbose", is_flag=True, help="Detailed progress output.")
@@ -72,6 +73,7 @@ def render(
     batch_size,
     temp_dir,
     chunk_duration,
+    recursive,
     dry_run,
     keep_temp,
     verbose,
@@ -107,7 +109,7 @@ def render(
         from .discovery import scan_directories, sort_items
         from .manifest import print_manifest
 
-        items = scan_directories(list(dirs))
+        items = scan_directories(list(dirs), recursive=recursive)
         items = sort_items(items, random=config.random_order)
         print_manifest(items, config, output)
     else:
@@ -119,6 +121,6 @@ def render(
         pipeline = RenderPipeline(
             config=config, dirs=list(dirs), output=output,
             temp_base=temp_dir, chunk_seconds=chunk_secs,
-            keep_temp=keep_temp,
+            keep_temp=keep_temp, recursive=recursive,
         )
         pipeline.run()

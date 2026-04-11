@@ -28,7 +28,9 @@ class MediaItem:
     content_hash: str = ""
 
 
-def scan_directories(dirs: list[Path], verbose: bool = False) -> list[MediaItem]:
+def scan_directories(
+    dirs: list[Path], verbose: bool = False, recursive: bool = False
+) -> list[MediaItem]:
     """Scan directories for supported image and video files, enriching with metadata."""
     items = []
 
@@ -37,7 +39,8 @@ def scan_directories(dirs: list[Path], verbose: bool = False) -> list[MediaItem]
             click.echo(f"  Warning: {dir_path} is not a directory, skipping.", err=True)
             continue
 
-        files = sorted(f for f in dir_path.iterdir() if f.is_file())
+        iterator = dir_path.rglob("*") if recursive else dir_path.iterdir()
+        files = sorted(f for f in iterator if f.is_file())
         for file_path in files:
             ext = file_path.suffix.lower()
 

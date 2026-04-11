@@ -32,7 +32,7 @@ class RenderPipeline:
     def __init__(
         self, config: RenderConfig, dirs: list[Path], output: Path,
         temp_base: Path | None = None, chunk_seconds: float | None = None,
-        keep_temp: bool = False,
+        keep_temp: bool = False, recursive: bool = False,
     ):
         self.config = config
         self.dirs = dirs
@@ -40,6 +40,7 @@ class RenderPipeline:
         self.temp_base = temp_base
         self.chunk_seconds = chunk_seconds
         self.keep_temp = keep_temp
+        self.recursive = recursive
         self.temp_dir: Path | None = None
 
     def run(self):
@@ -53,7 +54,7 @@ class RenderPipeline:
 
         # Discover media
         click.echo("\n  Scanning directories...")
-        items = scan_directories(self.dirs, verbose=self.config.verbose)
+        items = scan_directories(self.dirs, verbose=self.config.verbose, recursive=self.recursive)
         items = sort_items(items, random=self.config.random_order)
 
         if not items:
