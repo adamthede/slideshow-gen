@@ -1,6 +1,6 @@
 ---
 title: "Product Brief: Slideshow Gen for macOS"
-status: "draft"
+status: "complete"
 created: "2026-04-06T01:49:59Z"
 updated: "2026-04-06T01:58:00Z"
 inputs:
@@ -80,7 +80,7 @@ The app is a meaningful GUI for a mature engine — not a rebuild. The render pi
 ## Scope
 
 **MVP (v1.0) — In:**
-- Native macOS app (Swift/SwiftUI)
+- Native macOS app (Swift/SwiftUI, targeting macOS 26+)
 - Folder selection via drag-and-drop and file picker
 - Pre-render summary dashboard (counts, date range, GPS coverage, estimated length/size/render time)
 - Virtualized image browse/exclude grid with metadata display
