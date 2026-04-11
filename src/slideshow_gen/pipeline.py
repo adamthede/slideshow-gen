@@ -460,9 +460,8 @@ class RenderPipeline:
         cmd = [
             "ffmpeg", "-y", "-hide_banner", "-v", "warning",
             "-i", str(segment_path),
-            "-crf", str(self.config.final_crf),
-            "-preset", "medium",
-            "-c:v", "libx264",
+            "-c:v", "h264_videotoolbox",
+            "-b:v", "20M",
             "-movflags", "+faststart",
             "-an",
             str(self.output),

@@ -43,8 +43,7 @@ Three-phase FFmpeg render pipeline:
 
 - **4x supersampling** in Ken Burns filter to avoid FFmpeg zoompan jitter bug (trac.ffmpeg.org/ticket/4298)
 - **Filter scripts** written to temp files (`-filter_complex_script`) instead of inline — prevents shell escaping issues and command-line length limits
-- **Intermediate clips** use `-crf 0 -preset ultrafast` (lossless, fast encoding)
-- **Final output** uses `-crf 18 -preset medium -movflags +faststart` (quality-optimized, streaming-ready)
+- **All encodes** use `h264_videotoolbox -b:v 20M` (Apple Silicon hardware encoder) for intermediates and the final composite. Final output adds `-movflags +faststart` for streaming. Hardware encoding is ~15× faster than software libx264 on Mac Studio and avoids a CPU-bound final pass across long timelines.
 - **HEIC pre-conversion** — HEIC files are converted to JPG before FFmpeg processing since FFmpeg lacks native HEIC support
 - **Offline geocoding** — no network required; uses `reverse_geocoder` local database
 - **Date fallback chain** — filename convention -> EXIF DateTimeOriginal -> file mtime

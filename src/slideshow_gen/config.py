@@ -36,7 +36,6 @@ class RenderConfig:
     verbose: bool = False
     supersample_factor: int = 4
     intermediate_crf: int = 17
-    final_crf: int = 18
 
     @property
     def output_ratio(self) -> float:

@@ -403,9 +403,10 @@ def render_final_concat(
 ) -> bool:
     """Assemble segments into final MP4 using concat demuxer.
 
-    All segments must already have edge fades baked in. This is nearly
-    instant since it just concatenates and re-encodes the stream.
-    Returns True on success.
+    All segments must already have edge fades baked in. Re-encodes via
+    h264_videotoolbox to match the hardware-encoded intermediates, which
+    is ~15× faster on Apple Silicon than software libx264 at comparable
+    quality for slideshow content. Returns True on success.
     """
     if not segment_paths:
         return False
@@ -428,9 +429,8 @@ def render_final_concat(
         "-progress", "pipe:1",
         "-f", "concat", "-safe", "0",
         "-i", str(concat_path),
-        "-crf", str(config.final_crf),
-        "-preset", "medium",
-        "-c:v", "libx264",
+        "-c:v", "h264_videotoolbox",
+        "-b:v", "20M",
         "-movflags", "+faststart",
         "-an",
         str(output),

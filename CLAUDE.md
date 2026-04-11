@@ -39,7 +39,6 @@ Key modules:
 ## Conventions
 
 - Filter graphs written to script files (`-filter_complex_script`), never inline
-- Intermediate files use `-crf 0 -preset ultrafast` (lossless, fast)
-- Final output uses `-crf 18 -preset medium -movflags +faststart`
+- All encodes use `h264_videotoolbox -b:v 20M` (Apple Silicon hardware encoder) — intermediates and final alike. Final output adds `-movflags +faststart` for streaming.
 - Progressive temp cleanup after each batch reduction
 - HEIC files pre-converted to JPG before FFmpeg processing
