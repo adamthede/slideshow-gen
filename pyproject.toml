@@ -18,5 +18,10 @@ dependencies = [
 [project.scripts]
 slideshow-gen = "slideshow_gen.cli:cli"
 
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+]
+
 [tool.hatch.build.targets.wheel]
 packages = ["src/slideshow_gen"]

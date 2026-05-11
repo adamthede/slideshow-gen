@@ -20,6 +20,7 @@ class VideoInfo:
     width: int
     height: int
     duration: float
+    has_audio: bool = False
 
 
 def get_image_info(path: Path) -> ImageInfo | None:
@@ -35,13 +36,12 @@ def get_image_info(path: Path) -> ImageInfo | None:
 
 
 def get_video_info(path: Path) -> VideoInfo | None:
-    """Get video dimensions and duration via ffprobe."""
+    """Get video dimensions, duration, and audio presence via ffprobe."""
     try:
         result = subprocess.run(
             [
                 "ffprobe", "-v", "error",
-                "-select_streams", "v:0",
-                "-show_entries", "stream=width,height",
+                "-show_entries", "stream=width,height,codec_type",
                 "-show_entries", "format=duration",
                 "-of", "json",
                 str(path),
@@ -55,10 +55,19 @@ def get_video_info(path: Path) -> VideoInfo | None:
         streams = data.get("streams", [])
         fmt = data.get("format", {})
 
-        width = streams[0]["width"] if streams else 0
-        height = streams[0]["height"] if streams else 0
+        width = 0
+        height = 0
+        has_audio = False
+        
+        for s in streams:
+            if s.get("codec_type") == "video":
+                width = s.get("width", 0)
+                height = s.get("height", 0)
+            elif s.get("codec_type") == "audio":
+                has_audio = True
+
         duration = float(fmt.get("duration", 0))
 
-        return VideoInfo(width=width, height=height, duration=duration)
+        return VideoInfo(width=width, height=height, duration=duration, has_audio=has_audio)
     except Exception:
         return None

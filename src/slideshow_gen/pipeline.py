@@ -460,8 +460,29 @@ class RenderPipeline:
         cmd = [
             "ffmpeg", "-y", "-hide_banner", "-v", "warning",
             "-i", str(segment_path),
+        ]
+
+        if self.config.audio_track:
+            cmd.extend([
+                "-stream_loop", "-1",
+                "-i", str(self.config.audio_track),
+                "-filter_complex", f"[1:a]volume={self.config.audio_volume}[bg];[0:a][bg]amix=inputs=2:duration=first:dropout_transition=0[a]",
+                "-map", "0:v",
+                "-map", "[a]"
+            ])
+
+        cmd.extend([
             "-c:v", "h264_videotoolbox",
             "-b:v", "20M",
+            "-c:a", "aac", "-b:a", "192k",
+            "-movflags", "+faststart",
+            str(self.output),
+        ])
+
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=3600)
+        if result.returncode != 0:
+            click.echo(f"  Error: Final encode failed: {result.stderr[:300]}", err=True)
+",
             "-movflags", "+faststart",
             "-an",
             str(self.output),

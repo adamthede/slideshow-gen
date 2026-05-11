@@ -20,6 +20,7 @@ class MediaItem:
     width: int = 0
     height: int = 0
     duration: float = 0.0
+    has_audio: bool = False
     display_date: str = ""
     display_location: str = ""
     gps_lat: float | None = None
@@ -78,6 +79,7 @@ def scan_directories(
                     item.width = info.width
                     item.height = info.height
                     item.duration = info.duration
+                    item.has_audio = info.has_audio
 
                 # Get date from filename
                 item.parsed_date, item.display_date = get_date_for_item(file_path)

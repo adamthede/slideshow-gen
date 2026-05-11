@@ -370,14 +370,17 @@ def render_static_batch(
     cmd = [
         "ffmpeg", "-y", "-hide_banner",
         "-v", "warning" if not config.verbose else "info",
+        "-f", "lavfi", "-i", "anullsrc=channel_layout=stereo:sample_rate=48000",
         *[arg for source, _ in sources for arg in ["-i", str(source)]],
         "-filter_complex_script", str(script_path),
         "-t", str(batch_duration + fade_dur),
         "-map", "[out]",
+        "-map", "0:a",
         "-pix_fmt", "yuv420p",
         "-c:v", "h264_videotoolbox",
         "-b:v", "20M",
-        "-an",
+        "-c:a", "aac", "-b:a", "192k",
+        "-shortest",
         str(output_path),
     ]
 
@@ -429,12 +432,24 @@ def render_final_concat(
         "-progress", "pipe:1",
         "-f", "concat", "-safe", "0",
         "-i", str(concat_path),
+    ]
+
+    if config.audio_track:
+        cmd.extend([
+            "-stream_loop", "-1",
+            "-i", str(config.audio_track),
+            "-filter_complex", f"[1:a]volume={config.audio_volume}[bg];[0:a][bg]amix=inputs=2:duration=first:dropout_transition=0[a]",
+            "-map", "0:v",
+            "-map", "[a]"
+        ])
+
+    cmd.extend([
         "-c:v", "h264_videotoolbox",
         "-b:v", "20M",
+        "-c:a", "aac", "-b:a", "192k",
         "-movflags", "+faststart",
-        "-an",
         str(output),
-    ]
+    ])
 
     total_str = _format_duration(total_duration)
     click.echo(

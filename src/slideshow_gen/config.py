@@ -34,6 +34,8 @@ class RenderConfig:
     batch_size: int = 20
     static: bool = False
     verbose: bool = False
+    audio_track: Path | None = None
+    audio_volume: float = 1.0
     supersample_factor: int = 4
     intermediate_crf: int = 17
 

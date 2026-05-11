@@ -4,10 +4,30 @@ Generates drawtext filters with fade-in/fade-out alpha expressions
 for date and location overlays on slideshow images and video clips.
 """
 
+import os
+import platform
 from .config import RenderConfig
 
-# macOS system font path
-FONT_PATH = "/System/Library/Fonts/Helvetica.ttc"
+def get_font_path() -> str:
+    system = platform.system()
+    if system == "Darwin":
+        paths = ["/System/Library/Fonts/Helvetica.ttc", "/Library/Fonts/Arial.ttf"]
+    elif system == "Windows":
+        paths = ["C:\\Windows\\Fonts\\arial.ttf", "C:\\Windows\\Fonts\\segui.ttf"]
+    else:
+        paths = [
+            "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+            "/usr/share/fonts/dejavu/DejaVuSans.ttf",
+            "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+            "/usr/share/fonts/truetype/freefont/FreeSans.ttf"
+        ]
+    
+    for p in paths:
+        if os.path.exists(p):
+            return p
+    return ""  # FFmpeg might fail if it strictly requires a font path
+
+FONT_PATH = get_font_path()
 
 
 def generate_overlay_filters(

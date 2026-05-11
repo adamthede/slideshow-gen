@@ -45,6 +45,8 @@ def cli():
 @click.option("--no-location", is_flag=True, help="Disable location overlay.")
 @click.option("--workers", type=int, default=4, help="Parallel FFmpeg processes.")
 @click.option("--batch-size", type=int, default=20, help="Images per batch reduction.")
+@click.option("--audio-track", type=click.Path(exists=True, dir_okay=False, path_type=Path), default=None, help="Background audio track (e.g. mp3).")
+@click.option("--audio-volume", type=float, default=1.0, help="Volume of background audio track.")
 @click.option(
     "--temp-dir",
     type=click.Path(exists=True, file_okay=False, path_type=Path),
@@ -71,6 +73,8 @@ def render(
     no_location,
     workers,
     batch_size,
+    audio_track,
+    audio_volume,
     temp_dir,
     chunk_duration,
     recursive,
@@ -97,6 +101,8 @@ def render(
         show_location=show_location,
         workers=workers,
         batch_size=batch_size,
+        audio_track=audio_track,
+        audio_volume=audio_volume,
         verbose=verbose,
     )
 

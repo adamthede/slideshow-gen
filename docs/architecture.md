@@ -147,9 +147,15 @@ No media content is held in Python memory. Pillow opens images only briefly for 
 
 ## Known Limitations / Technical Debt
 
-1. **No tests** — test directory exists but is empty
-2. **macOS-only font path** — would need platform detection for cross-platform support
-3. **No audio support** — all outputs are `-an` (no audio track)
-4. **No recursive directory scanning** — only top-level files in specified directories
-5. **No progress persistence** — if rendering is interrupted, all temp work is lost
-6. **No video metadata overlays** — videos get date from filename only (no EXIF equivalent)
+1. **No progress persistence** — if rendering is interrupted, all temp work is lost
+2. **No video metadata overlays** — videos get date from filename only (no EXIF equivalent)
+
+*(Note: Previous limitations regarding tests, macOS-only fonts, and lack of audio support were resolved in v0.2.0).*
+
+## GUI Architecture Transition (Phase 3)
+
+The project is currently evolving toward a native macOS GUI application. The planned architecture involves:
+
+1. **Engine Decoupling:** The core logic (`RenderPipeline`, FFmpeg wrappers, config) remains pure Python and fully decoupled from the `click` CLI.
+2. **Progress Events:** The pipeline will be refactored to emit progress events (callbacks or observables) rather than printing directly to `stdout`, allowing a GUI controller to update progress bars.
+3. **GUI Framework:** Evaluated approaches include a SwiftUI native app wrapping the Python engine via `Process` execution, or a pure Python GUI (PyQt6/PySide6) bundled via `py2app`.
