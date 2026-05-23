@@ -16,6 +16,7 @@ import click
 
 from .config import RenderConfig
 from .discovery import MediaItem, scan_directories, sort_items
+from .estimate import estimate_output, format_estimate
 from .ffmpeg import (
     check_ffmpeg,
     parallel_render,
@@ -33,6 +34,7 @@ class RenderPipeline:
         self, config: RenderConfig, dirs: list[Path], output: Path,
         temp_base: Path | None = None, chunk_seconds: float | None = None,
         keep_temp: bool = False, recursive: bool = False,
+        estimate_only: bool = False,
     ):
         self.config = config
         self.dirs = dirs
@@ -41,6 +43,7 @@ class RenderPipeline:
         self.chunk_seconds = chunk_seconds
         self.keep_temp = keep_temp
         self.recursive = recursive
+        self.estimate_only = estimate_only
         self.temp_dir: Path | None = None
 
     def run(self):
@@ -64,6 +67,14 @@ class RenderPipeline:
         images = [i for i in items if i.media_type == "image"]
         videos = [i for i in items if i.media_type == "video"]
         click.echo(f"  Found {len(images)} images and {len(videos)} videos.")
+
+        # Pre-render estimate
+        est = estimate_output(items, self.config)
+        click.echo(format_estimate(est))
+
+        if self.estimate_only:
+            click.echo("  --estimate-only: exiting before render.")
+            return
 
         # Create temp directory
         self.temp_dir = Path(tempfile.mkdtemp(prefix="slideshow-gen-", dir=self.temp_base))

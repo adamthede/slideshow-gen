@@ -56,6 +56,7 @@ def cli():
 @click.option("--chunk-duration", type=int, default=None, help="Split output into chunks of N minutes (e.g. 60).")
 @click.option("--recursive", "-r", is_flag=True, help="Recursively scan subdirectories for media files.")
 @click.option("--dry-run", is_flag=True, help="Print manifest without rendering.")
+@click.option("--estimate-only", is_flag=True, help="Scan + print duration/size estimate, then exit.")
 @click.option("--keep-temp", is_flag=True, help="Keep temp directory after render for debugging.")
 @click.option("--verbose", is_flag=True, help="Detailed progress output.")
 def render(
@@ -79,6 +80,7 @@ def render(
     chunk_duration,
     recursive,
     dry_run,
+    estimate_only,
     keep_temp,
     verbose,
 ):
@@ -128,5 +130,6 @@ def render(
             config=config, dirs=list(dirs), output=output,
             temp_base=temp_dir, chunk_seconds=chunk_secs,
             keep_temp=keep_temp, recursive=recursive,
+            estimate_only=estimate_only,
         )
         pipeline.run()
