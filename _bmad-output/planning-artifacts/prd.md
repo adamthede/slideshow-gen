@@ -53,10 +53,10 @@ The engine is proven: a Python CLI validated on collections of 4,000+ images acr
 
 ## Project Classification
 
-- **Project Type:** Native macOS desktop application (Swift/SwiftUI)
+- **Project Type:** macOS desktop application (Tauri shell + React/Tailwind/shadcn UI) wrapping the existing Python rendering engine as a frozen sidecar binary. See [ADR-0001](../../docs/adr/0001-app-stack.md).
 - **Domain:** Consumer creative tools / media
-- **Complexity:** Medium — general domain but technically demanding (Python-to-Swift port of FFmpeg filter graph construction, 4x supersampled Ken Burns math, three-phase render pipeline, macOS platform concerns including notarization and FFmpeg bundling)
-- **Project Context:** Brownfield — proven CLI engine (~1,700 LOC, 11 modules) being rewritten as a native macOS application while retaining the same FFmpeg subprocess architecture
+- **Complexity:** Medium — the Python engine is reused as-is. Complexity now lives in (a) the sidecar IPC contract between the Rust/Tauri shell and the frozen Python CLI, (b) PyInstaller packaging + signing of the sidecar, and (c) Tauri's macOS notarization + auto-update pipeline.
+- **Project Context:** Brownfield — proven CLI engine (~1,700 LOC, 11 modules) kept intact and wrapped, not rewritten. The CLI remains a first-class surface alongside the app.
 
 ## Users
 
@@ -117,7 +117,7 @@ Date and location overlays render on every slide that has them. Date fallback ch
 Optional background music track + per-render volume. Video segments preserve their source audio. Background music ducks under video-segment audio automatically (sidechain compression). (Engine: shipped in commit `bb3dbec`.)
 
 ### FR10 — CLI parity
-The Python CLI remains supported and continues to share the rendering algorithm definition. Either: (a) CLI stays Python and is treated as a reference implementation, or (b) CLI is rewritten as a Swift executable sharing the app's render core. Decision in Epic 0.
+The Python CLI remains the canonical engine surface. The app and the CLI share the same code: the app ships the frozen CLI as a sidecar binary and drives it via IPC. CLI improvements (estimates, ducking, future overlay features) automatically benefit the app. See [ADR-0001](../../docs/adr/0001-app-stack.md).
 
 ## Non-Functional Requirements
 
@@ -144,86 +144,86 @@ Output MP4 must remain identical-feeling to the current CLI output: same Ken Bur
 
 ## Epics
 
-Epics are ordered. Each ships independently. Engine-side epics (E0, E1, E5) feed both the current CLI and the future macOS app.
+Epics are ordered. Each ships independently. Engine-side epics (E0) ship to the CLI immediately. The Tauri app stack is established once in Epic 1 (skeleton + sidecar contract + signing), then UI features stack on top in Epics 2–4. Distribution is hardened in Epic 5. See [ADR-0001](../../docs/adr/0001-app-stack.md) for the stack decision.
 
-### Epic 0 — Engine hardening for parity (CLI, prerequisite)
+### Epic 0 — Engine hardening (CLI, prerequisite)
 
-Goal: lock down the CLI engine so the Swift port has a stable target. Anything fixed here ships in the CLI immediately.
+Goal: lock down the CLI engine so the sidecar that the app embeds has a stable, well-instrumented surface. Everything in this epic ships in the CLI first.
 
 Stories:
-- E0.S1 — Pre-render summary in CLI: print duration estimate, size estimate (bitrate × duration), GPS coverage %, dupes removed. Add `--estimate-only` to exit before phase 1.
+- E0.S1 — Pre-render summary in CLI: duration estimate, size estimate (bitrate × duration), GPS coverage %, dupes removed. Add `--estimate-only` to exit before phase 1. *(Shipped: commit `7ac4c0a`.)*
 - E0.S2 — Audible-ducking acceptance test: synthetic test that probes peak volume during a known video-segment window and asserts the bg track is attenuated. Locks in the fix from `bb3dbec`.
 - E0.S3 — Render-time calibration: time the first N clips of phase 1, extrapolate, log an ETA. Lays groundwork for the app's render-time estimate.
-- E0.S4 — CLI vs. Swift decision: short ADR in `docs/` choosing whether the CLI remains Python (reference) or is rewritten in Swift atop the app's render core. Block on this before Epic 4.
-- E0.S5 — Engine API extraction: refactor `pipeline.py` so the orchestration is callable as a library (not just from `cli.py`). Same Python today; clarifies the surface that the Swift port has to match.
+- E0.S4 — App stack decision: ADR capturing Tauri + React + shadcn + Python sidecar. *(Shipped: `docs/adr/0001-app-stack.md`.)*
+- E0.S5 — Engine API extraction: refactor `pipeline.py` so the orchestration is callable as a library (not just from `cli.py`). Clarifies the surface that the sidecar's IPC layer will expose.
+- E0.S6 — Sidecar IPC contract design: define the JSON-line event schema the frozen CLI emits over stdout (phase, progress, ETA, warnings, completion, error). Versioned. Documented under `docs/sidecar-protocol.md`. Implement behind a `--ipc` flag on the existing CLI so the sidecar and the developer-mode CLI stay one binary.
 
-### Epic 1 — Swift render core (macOS, foundational)
+### Epic 1 — Tauri shell + sidecar foundation
 
-Goal: port the algorithm-defining pieces of the engine into Swift as a library, no UI. Validate parity against CLI on a fixture corpus.
-
-Stories:
-- E1.S1 — Project skeleton: SwiftPM workspace, app target + render-core library target, FFmpeg bundled as a separate executable in `Resources/`, code signing config.
-- E1.S2 — Port `discovery.swift`: directory scan, supported-format filter, duplicate detection by partial content hash, sort by date.
-- E1.S3 — Port `metadata.swift`: filename date parser, EXIF read via ImageIO/CGImageSource, GPS extraction, bundled reverse-geocoder lookup.
-- E1.S4 — Port `kenburns.swift`: 4x supersampling math, effect chooser, zoompan filter expression generation. Unit tests cross-check Python output for the same inputs.
-- E1.S5 — Port `overlay.swift`: drawtext filter string generation, font resolution.
-- E1.S6 — Port `ffmpeg.swift`: subprocess runner, filter-script writer, parallel worker pool. Reuses the bundled FFmpeg binary.
-- E1.S7 — Port `pipeline.swift`: three-phase orchestrator with progress callbacks.
-- E1.S8 — HEIC handling: CoreImage / ImageIO-based HEIC → JPEG conversion to replace pillow-heif.
-- E1.S9 — Parity harness: render a fixture set with both Python CLI and Swift core, compare output (duration, dimensions, peak SSIM/PSNR against the Python output, audio waveform RMS).
-
-### Epic 2 — App shell and folder ingestion (macOS)
-
-Goal: SwiftUI app that lets the user point at a folder and see the scan results. No render yet.
+Goal: stand up the Tauri app skeleton, embed the frozen Python CLI as a signed sidecar, prove the full request/event loop end-to-end with a trivial command ("scan and return summary"). No real UI yet — a "Hello, slideshow" build that exercises every layer that matters for distribution.
 
 Stories:
-- E2.S1 — App skeleton: SwiftUI scene, app icon, menu bar, About window.
-- E2.S2 — Folder drop zone: drag-and-drop + file picker, security-scoped bookmarks, recent folders.
-- E2.S3 — Scan orchestration: trigger discovery + metadata on a background queue, with progress.
-- E2.S4 — Summary card: image/video count, date range, GPS coverage, duplicates removed.
-- E2.S5 — Estimates: duration, size, render-time (consumes E0.S1 / E0.S3 formulas).
-- E2.S6 — Settings panel: resolution, slide duration, fade, FPS, output destination, audio track, audio volume, recursive, batch size.
+- E1.S1 — Tauri project skeleton: `desktop/` workspace, Vite + React + TypeScript + Tailwind + shadcn/ui baseline, `src-tauri/` Rust shell, app icon placeholder.
+- E1.S2 — Freeze the Python CLI as a sidecar binary via PyInstaller (one-file or one-folder per signing tradeoffs). Include FFmpeg binary alongside.
+- E1.S3 — Wire Tauri's sidecar configuration to spawn the frozen CLI; pass arguments; capture stdout/stderr.
+- E1.S4 — Implement the IPC event loop in Rust: spawn sidecar, stream JSON-line events, forward to frontend via Tauri events.
+- E1.S5 — Frontend hook: a React hook that subscribes to sidecar events and exposes typed progress state.
+- E1.S6 — End-to-end smoke: clicking "Scan" in a minimal UI runs the sidecar against a fixture folder and renders the summary returned via IPC. Proves every layer.
+- E1.S7 — Bundle + sign + notarize a "Hello, slideshow" build, install on the user's Mac, confirm Gatekeeper accepts. *Notarization proven before any real UI work.*
 
-### Epic 3 — Browse / exclude grid (macOS)
+### Epic 2 — Ingestion and pre-render summary UI
 
-Goal: virtualized thumbnail grid that the user can optionally enter to exclude items before rendering. Memory-bounded.
-
-Stories:
-- E3.S1 — Lazy thumbnail loader: ImageIO downsampling, on-demand decode, LRU cache capped at 100 items.
-- E3.S2 — Virtualized grid: `LazyVGrid` / `NSCollectionView` with cell recycling; only visible thumbnails are decoded.
-- E3.S3 — Exclude/include toggle per item; running excluded-count badge.
-- E3.S4 — Exclusion model: transient per-session for v1 (sidecar file deferred to a later iteration).
-- E3.S5 — Summary card live-updates duration/size estimates when exclusions change.
-
-### Epic 4 — Render execution and result (macOS)
-
-Goal: actually render from the app, show progress, preview the result.
+Goal: real folder selection, real scan, real summary card with estimates. The user can point the app at a folder and see what would happen if they hit Render.
 
 Stories:
-- E4.S1 — Render kickoff: hand the scan result + settings to the Swift render core; track lifecycle on a background actor.
-- E4.S2 — Progress UI: phase indicator (discovery / clips / batching / composite), per-phase progress bar, ETA, cancel button.
-- E4.S3 — Cancellation: terminate FFmpeg subprocesses, clean temp directory, preserve `--keep-temp` parity.
-- E4.S4 — Per-item failure handling: continue on single-item failure, log to an in-app warnings panel; mirrors CLI behavior.
-- E4.S5 — Result view: AVKit player, Reveal in Finder, Open in QuickTime, render-again-with-same-settings shortcut.
+- E2.S1 — Drop zone + file picker: drag-and-drop with visual affordance, native file picker, security-scoped bookmarks for persistence, recent folders.
+- E2.S2 — Scan orchestration: dispatch `scan` to the sidecar, stream progress (file count, current path).
+- E2.S3 — Summary card: image/video count, date range, GPS coverage, dupes removed — designed with shadcn/Card primitives.
+- E2.S4 — Estimates panel: duration, output size, render-time. Sources its numbers from the sidecar (`estimate_output`).
+- E2.S5 — Settings drawer: resolution, slide duration, fade, FPS, output destination, audio track + volume, recursive, batch size. Form state persists per-folder via security-scoped bookmark + localStorage.
+- E2.S6 — Visual polish pass: dark mode, motion/easing on summary card appearance, typography scale, app icon — first deliberate design pass.
 
-### Epic 5 — Distribution (macOS)
+### Epic 3 — Browse / exclude grid
 
-Goal: ship the app as a notarized direct download.
+Goal: optional, virtualized thumbnail grid for excluding items before rendering. Memory-bounded.
 
 Stories:
-- E5.S1 — FFmpeg bundling: separate executable in `Resources/`, version pinned (FFmpeg 7.1+), signed with the app's identity.
-- E5.S2 — Hardened runtime + entitlements minimal set; verify subprocess spawn works under hardened runtime.
-- E5.S3 — Code signing pipeline (Developer ID Application).
-- E5.S4 — Notarization automation (`notarytool` in a build script).
-- E5.S5 — DMG/zip packaging + download landing page.
-- E5.S6 — Auto-update mechanism (Sparkle or hand-rolled) — optional for v1, decide late.
+- E3.S1 — Thumbnail generation: sidecar command that emits resized JPEG thumbnails for a folder on demand, cached in the app's `appData` directory keyed by content hash.
+- E3.S2 — Virtualized grid: `@tanstack/react-virtual` (or similar) so only visible cells decode/hold image bytes; cap at ~100 in-memory.
+- E3.S3 — Per-item exclude/include toggle; running excluded-count badge.
+- E3.S4 — Exclusion model: transient per-session for v1 (sidecar file deferred). Exclusions are passed to the render command as an explicit exclude list.
+- E3.S5 — Estimates panel live-updates duration/size when exclusions change.
+
+### Epic 4 — Render execution and result
+
+Goal: render from the app, show progress, preview the result.
+
+Stories:
+- E4.S1 — Render kickoff: dispatch the `render` command to the sidecar with the full settings payload.
+- E4.S2 — Progress UI: phase indicator (discovery / clips / batching / composite), per-phase progress bar, ETA, cancel button. Streams from the sidecar's IPC events.
+- E4.S3 — Cancellation: terminate the sidecar process, which propagates SIGTERM to in-flight FFmpeg children; sidecar cleans temp directory before exit. `--keep-temp` parity exposed as a setting.
+- E4.S4 — Per-item failure handling: warnings stream into an in-app panel; render does not abort on single-item failure (mirrors CLI behavior).
+- E4.S5 — Result view: in-app preview via an HTML5 `<video>` element pointed at the output file; Reveal in Finder; Open in QuickTime; "render again with same settings" shortcut.
+
+### Epic 5 — Distribution and updates
+
+Goal: ship the app as a notarized direct download from GitHub releases, with auto-update.
+
+Stories:
+- E5.S1 — Build pipeline: GitHub Actions workflow that builds the React frontend, freezes the Python sidecar, assembles the Tauri bundle, signs (Developer ID Application), and notarizes via `notarytool`.
+- E5.S2 — Code signing hygiene: sign the Tauri shell, the sidecar binary, the embedded FFmpeg, and any auxiliary dylibs/.so files. Verify with `codesign --verify --deep`.
+- E5.S3 — Hardened runtime + minimal entitlements: ensure sidecar process spawn and FFmpeg child spawn both work; document why each entitlement is needed.
+- E5.S4 — DMG packaging with drag-to-Applications layout, signed and stapled.
+- E5.S5 — Tauri auto-updater: signed update manifest hosted via GitHub releases, version pinning, rollback discipline. "Check for updates" menu item.
+- E5.S6 — Release docs: README install section, troubleshooting (Gatekeeper, first-launch), changelog discipline tied to GitHub releases.
 
 ## Open Questions
 
 - Exclusion persistence: transient (v1 default) vs. sidecar JSON next to the folder (later)?
-- CLI fate: Python reference (less work, two codebases) vs. Swift rewrite sharing the app's render core (more work, single codebase). Capture as ADR in E0.S4.
+- ~~CLI fate~~ — **Resolved by [ADR-0001](../../docs/adr/0001-app-stack.md):** Python CLI is the engine surface, frozen as a sidecar and embedded in a Tauri shell. No engine rewrite.
 - App name and bundle ID before E5.
 - Render-time estimate calibration strategy: per-machine cache vs. per-run warm-up. Default to per-run warm-up; cache later if it earns its complexity.
+- Sidecar packaging tradeoffs: PyInstaller one-file (simpler signing, slower cold start) vs. one-folder (faster start, every nested dylib needs signing). Decide in E1.S2.
 
 ## Success Criteria
 
