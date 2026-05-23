@@ -2,6 +2,8 @@
 
 Ken Burns slideshow generator with EXIF-aware metadata overlays. Takes directories of images and video files and produces MP4 video slideshows for playback on digital picture frames and computers.
 
+> The Python CLI is the engine. **Marquee** — the macOS desktop app being built on top of it — is in active development. See [`_bmad-output/planning-artifacts/prd.md`](_bmad-output/planning-artifacts/prd.md) and [ADR-0001](docs/adr/0001-app-stack.md).
+
 ## Features
 
 - **Ken Burns effect** — smooth pan/zoom animations on still images

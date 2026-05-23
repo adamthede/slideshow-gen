@@ -2,6 +2,11 @@
 
 Ken Burns slideshow generator with EXIF-aware metadata overlays. Takes directories of images and video files and produces MP4 video slideshows for playback on digital picture frames and computers.
 
+## Two layers, one repo
+
+- **`slideshow-gen`** — the Python CLI / engine. Package, binary, and module name. Stable, library-callable via `RenderPipeline`, instrumented for IPC via `--ipc` (see `docs/sidecar-protocol.md`).
+- **Marquee** — the macOS desktop app (in development) that wraps the engine. Tauri + React + shadcn/ui shell, with the CLI frozen as a signed sidecar binary. Bundle ID `com.thedetech.marquee`, team `U85N54PC5J`. See [ADR-0001](docs/adr/0001-app-stack.md) and `_bmad-output/planning-artifacts/prd.md` for the architecture and roadmap. App scaffolding lives (or will live) under `desktop/`.
+
 ## Tech Stack
 
 - **Python 3.11+** with virtual environment at `.venv/`

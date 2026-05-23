@@ -8,7 +8,7 @@
 - **Tech Stack:** Click + Pillow + ExifRead + reverse_geocoder + FFmpeg (subprocess)
 - **Entry Point:** `slideshow_gen.cli:cli` (`slideshow-gen render`)
 - **Version:** 0.1.0
-- **Future Direction:** Native macOS application
+- **Future Direction:** **Marquee** — a macOS desktop app (Tauri + React + shadcn) wrapping this engine as a signed sidecar binary. Bundle ID `com.thedetech.marquee`. See [ADR-0001](adr/0001-app-stack.md).
 
 ## Quick Reference
 
