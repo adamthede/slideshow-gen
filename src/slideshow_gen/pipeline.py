@@ -16,7 +16,8 @@ import click
 
 from .config import RenderConfig
 from .discovery import MediaItem, scan_directories, sort_items
-from .estimate import estimate_output, format_estimate
+from .estimate import estimate_output
+from .events import ConsoleReporter, Reporter
 from .ffmpeg import (
     check_ffmpeg,
     parallel_render,
@@ -34,7 +35,7 @@ class RenderPipeline:
         self, config: RenderConfig, dirs: list[Path], output: Path,
         temp_base: Path | None = None, chunk_seconds: float | None = None,
         keep_temp: bool = False, recursive: bool = False,
-        estimate_only: bool = False,
+        estimate_only: bool = False, reporter: Reporter | None = None,
     ):
         self.config = config
         self.dirs = dirs
@@ -44,41 +45,58 @@ class RenderPipeline:
         self.keep_temp = keep_temp
         self.recursive = recursive
         self.estimate_only = estimate_only
+        self.reporter: Reporter = reporter or ConsoleReporter(verbose=config.verbose)
         self.temp_dir: Path | None = None
 
     def run(self):
         """Execute the full three-phase render pipeline."""
         start_time = time.time()
+        self.reporter.started({
+            "output": str(self.output),
+            "dirs": [str(d) for d in self.dirs],
+            "resolution": f"{self.config.output_width}x{self.config.output_height}",
+            "slide_duration": self.config.slide_duration,
+            "fade_duration": self.config.fade_duration,
+            "fps": self.config.fps,
+            "static": self.config.static,
+            "audio_track": str(self.config.audio_track) if self.config.audio_track else None,
+        })
 
         # Preflight checks
         if not check_ffmpeg():
-            click.echo("Error: FFmpeg not found. Install via: brew install ffmpeg", err=True)
+            self.reporter.error("FFmpeg not found. Install via: brew install ffmpeg")
             return
 
         # Discover media
-        click.echo("\n  Scanning directories...")
+        self.reporter.phase_started("discovery")
         items = scan_directories(self.dirs, verbose=self.config.verbose, recursive=self.recursive)
         items = sort_items(items, random=self.config.random_order)
 
         if not items:
-            click.echo("  Error: No supported media files found.", err=True)
+            self.reporter.error("No supported media files found.")
             return
 
         images = [i for i in items if i.media_type == "image"]
         videos = [i for i in items if i.media_type == "video"]
-        click.echo(f"  Found {len(images)} images and {len(videos)} videos.")
+        self.reporter.discovery_complete(len(images), len(videos))
 
         # Pre-render estimate
         est = estimate_output(items, self.config)
-        click.echo(format_estimate(est))
+        self.reporter.estimate(
+            duration_s=est.total_duration_s,
+            size_bytes=est.size_bytes,
+            image_duration_s=est.image_duration_s,
+            video_duration_s=est.video_duration_s,
+        )
 
         if self.estimate_only:
-            click.echo("  --estimate-only: exiting before render.")
+            self.reporter.info("--estimate-only: exiting before render.")
             return
 
         # Create temp directory
         self.temp_dir = Path(tempfile.mkdtemp(prefix="slideshow-gen-", dir=self.temp_base))
-        click.echo(f"  Temp directory: {self.temp_dir}")
+        if self.config.verbose:
+            self.reporter.info(f"Temp directory: {self.temp_dir}")
 
         try:
             if self.config.static:
@@ -87,7 +105,7 @@ class RenderPipeline:
                 batched_segments = self._kenburns_pipeline(items, images, videos)
 
             if not batched_segments:
-                click.echo("  Error: No segments to composite.", err=True)
+                self.reporter.error("No segments to composite.")
                 return
 
             gc.collect()
@@ -109,24 +127,21 @@ class RenderPipeline:
                 outputs = self._single_output(batched_segments)
 
             if not outputs:
-                click.echo("  Error: Final composite failed.", err=True)
+                self.reporter.error("Final composite failed.")
                 return
 
             elapsed = time.time() - start_time
-            total_size = sum(p.stat().st_size for p in outputs) / (1024 * 1024)
-            click.echo(f"\n  Done! {total_size:.1f} MB in {elapsed:.0f}s")
-            for p in outputs:
-                click.echo(f"  Output: {p}")
+            self.reporter.complete(outputs, elapsed)
 
         finally:
             # Cleanup temp directory (unless --keep-temp)
             if self.temp_dir and self.temp_dir.exists():
                 if self.keep_temp:
-                    click.echo(f"  Temp directory preserved: {self.temp_dir}")
+                    self.reporter.info(f"Temp directory preserved: {self.temp_dir}")
                 else:
                     shutil.rmtree(self.temp_dir, ignore_errors=True)
                     if self.config.verbose:
-                        click.echo(f"  Cleaned up temp directory.")
+                        self.reporter.info("Cleaned up temp directory.")
 
     def _single_output(self, segments: list[dict]) -> list[Path]:
         """Render all segments into a single output file."""
@@ -137,7 +152,7 @@ class RenderPipeline:
             return [self.output] if self.output.exists() else []
 
         success = render_final_concat(
-            segment_paths, self.output, self.config, self.temp_dir,
+            segment_paths, self.output, self.config, self.temp_dir, self.reporter,
         )
         return [self.output] if success else []
 
@@ -177,7 +192,10 @@ class RenderPipeline:
             chunk_dur = sum(s["duration"] for s in chunk)
             chunk_mins = chunk_dur / 60
 
-            click.echo(f"\n  [chunk {ci}/{len(chunks)}] {len(chunk_paths)} segments, ~{chunk_mins:.0f} min")
+            self.reporter.progress(
+                "chunking", ci, len(chunks),
+                message=f"{len(chunk_paths)} segments, ~{chunk_mins:.0f} min",
+            )
 
             if len(chunk_paths) == 1:
                 self.output = chunk_output
@@ -187,11 +205,12 @@ class RenderPipeline:
             else:
                 success = render_final_concat(
                     chunk_paths, chunk_output, self.config, self.temp_dir,
+                    self.reporter,
                 )
                 if success:
                     outputs.append(chunk_output)
                 else:
-                    click.echo(f"  Error: Chunk {ci} failed.", err=True)
+                    self.reporter.error(f"Chunk {ci} failed.")
 
         return outputs
 
@@ -199,10 +218,10 @@ class RenderPipeline:
         self, items: list[MediaItem], images: list[MediaItem], videos: list[MediaItem],
     ) -> list[dict]:
         """Ken Burns pipeline: Phase 1 (parallel clips) → Phase 2 (batch reduce)."""
-        rendered_clips = parallel_render(items, self.temp_dir, self.config)
+        rendered_clips = parallel_render(items, self.temp_dir, self.config, self.reporter)
 
         if not rendered_clips and not videos:
-            click.echo("  Error: No images rendered successfully.", err=True)
+            self.reporter.error("No images rendered successfully.")
             return []
 
         gc.collect()
@@ -221,7 +240,7 @@ class RenderPipeline:
         self, items: list[MediaItem], images: list[MediaItem], videos: list[MediaItem],
     ) -> list[dict]:
         """Static pipeline: images go directly into batches (no Phase 1)."""
-        click.echo(f"\n  [static] Building batches directly from {len(images)} images...")
+        self.reporter.phase_started("static-batching", total=len(images))
 
         # Walk items in order, grouping consecutive images into batches
         # Videos break batch boundaries (same as Ken Burns path)
@@ -270,7 +289,7 @@ class RenderPipeline:
                 self._flush_static_batch(current_batch, len(batched), batch_num, total_batches)
             )
 
-        click.echo(f"  [static] {len(batched)} segments ready.")
+        self.reporter.phase_complete("static-batching", f"{len(batched)} segments ready")
         return batched
 
     def _flush_static_batch(
@@ -283,7 +302,10 @@ class RenderPipeline:
         for i in range(0, len(items), batch_size):
             chunk = items[i:i + batch_size]
             batch_num += 1
-            click.echo(f"  [static] [{batch_num}/{total_batches}] {len(chunk)} images...")
+            self.reporter.progress(
+                "static-batching", batch_num, total_batches,
+                message=f"{len(chunk)} images",
+            )
 
             batch_idx = batch_offset + len(results)
             result = render_static_batch(chunk, batch_idx, self.temp_dir, self.config)
@@ -294,7 +316,7 @@ class RenderPipeline:
                 batch_dur = len(chunk) * slide_dur - (len(chunk) - 1) * fade_dur
                 results.append({"type": "batch", "path": result, "duration": batch_dur})
             else:
-                click.echo(f"  Warning: Static batch {batch_idx} failed, skipping.", err=True)
+                self.reporter.warning(f"Static batch {batch_idx} failed, skipping.")
 
         return results
 
@@ -465,7 +487,10 @@ class RenderPipeline:
             return batch
 
         clip_paths = [s["path"] for s in batch]
-        click.echo(f"  [batching] [{batch_num}/{total_batches}] {len(clip_paths)} clips...")
+        self.reporter.progress(
+            "batching", batch_num, total_batches,
+            message=f"{len(clip_paths)} clips",
+        )
 
         result = render_batch(clip_paths, batch_index, self.temp_dir, self.config)
 
@@ -485,12 +510,12 @@ class RenderPipeline:
             return [{"type": "batch", "path": result, "duration": batch_dur}]
         else:
             # Batch failed — fall back to individual clips
-            click.echo(f"  Warning: Batch {batch_index} failed, using individual clips.", err=True)
+            self.reporter.warning(f"Batch {batch_index} failed, using individual clips.")
             return batch
 
     def _single_segment_output(self, segment_path: Path, duration: float):
         """When there's only one segment, re-encode it as the final output."""
-        click.echo(f"\n  [compositing] Single segment — encoding final output...")
+        self.reporter.phase_started("compositing")
 
         cmd = [
             "ffmpeg", "-y", "-hide_banner", "-v", "warning",
@@ -524,4 +549,4 @@ class RenderPipeline:
 
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=3600)
         if result.returncode != 0:
-            click.echo(f"  Error: Final encode failed: {result.stderr[:300]}", err=True)
+            self.reporter.error(f"Final encode failed: {result.stderr[:300]}")

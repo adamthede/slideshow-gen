@@ -10,6 +10,7 @@ import click
 
 from .config import RenderConfig
 from .discovery import MediaItem
+from .events import Reporter
 from .heic import convert_heic_to_jpg, is_heic
 from .kenburns import choose_effect, generate_filter_chain
 from .memutil import auto_worker_count
@@ -127,6 +128,7 @@ def parallel_render(
     items: list[MediaItem],
     temp_dir: Path,
     config: RenderConfig,
+    reporter: Reporter | None = None,
 ) -> list[tuple[int, Path]]:
     """Render all image items to temp clips in parallel.
 
@@ -166,7 +168,10 @@ def parallel_render(
     completed = 0
 
     workers = auto_worker_count(config.workers)
-    click.echo(f"\n  [images] Rendering {total} images with {workers} workers...")
+    if reporter is not None:
+        reporter.phase_started("images", total=total)
+    else:
+        click.echo(f"\n  [images] Rendering {total} images with {workers} workers...")
 
     with ProcessPoolExecutor(max_workers=workers) as executor:
         futures = {executor.submit(_render_worker, w): w[1] for w in work}
@@ -179,14 +184,24 @@ def parallel_render(
                 if path_str:
                     results.append((idx, Path(path_str)))
             except Exception as e:
-                click.echo(f"  Warning: Worker failed for index {orig_idx}: {e}", err=True)
+                msg = f"Worker failed for index {orig_idx}: {e}"
+                if reporter is not None:
+                    reporter.warning(msg)
+                else:
+                    click.echo(f"  Warning: {msg}", err=True)
 
             # Progress
-            pct = completed / total * 100
-            click.echo(f"\r  [images] [{completed}/{total}] {pct:.1f}%", nl=False)
+            if reporter is not None:
+                reporter.progress("images", completed, total)
+            else:
+                pct = completed / total * 100
+                click.echo(f"\r  [images] [{completed}/{total}] {pct:.1f}%", nl=False)
 
-    click.echo("")  # Newline after progress
-    click.echo(f"  [images] {len(results)}/{total} images rendered successfully.")
+    if reporter is not None:
+        reporter.phase_complete("images", f"{len(results)}/{total} rendered")
+    else:
+        click.echo("")  # Newline after progress
+        click.echo(f"  [images] {len(results)}/{total} images rendered successfully.")
 
     return sorted(results, key=lambda x: x[0])
 
@@ -425,6 +440,7 @@ def render_final_concat(
     output: Path,
     config: RenderConfig,
     temp_dir: Path,
+    reporter: Reporter | None = None,
 ) -> bool:
     """Assemble segments into final MP4 using concat demuxer.
 
@@ -477,10 +493,13 @@ def render_final_concat(
     ])
 
     total_str = _format_duration(total_duration)
-    click.echo(
-        f"\n  [compositing] Concatenating {len(segment_paths)} segments "
-        f"({total_str}) into final video..."
-    )
+    if reporter is not None:
+        reporter.phase_started("compositing", total=int(total_duration))
+    else:
+        click.echo(
+            f"\n  [compositing] Concatenating {len(segment_paths)} segments "
+            f"({total_str}) into final video..."
+        )
 
     # Use a temp file for stderr to avoid pipe buffer deadlock
     stderr_path = temp_dir / "ffmpeg-concat-stderr.log"
@@ -507,31 +526,53 @@ def render_final_concat(
                                 pct_int = int(pct)
                                 if pct_int > last_pct:
                                     last_pct = pct_int
-                                    elapsed_str = _format_duration(elapsed_s)
-                                    click.echo(
-                                        f"\r  [compositing] {elapsed_str}/{total_str} "
-                                        f"({pct:.0f}%)",
-                                        nl=False,
-                                    )
+                                    if reporter is not None:
+                                        reporter.progress(
+                                            "compositing",
+                                            int(elapsed_s),
+                                            int(total_duration),
+                                        )
+                                    else:
+                                        elapsed_str = _format_duration(elapsed_s)
+                                        click.echo(
+                                            f"\r  [compositing] {elapsed_str}/{total_str} "
+                                            f"({pct:.0f}%)",
+                                            nl=False,
+                                        )
                         except (ValueError, ZeroDivisionError):
                             pass
             except Exception:
                 pass
 
             proc.wait(timeout=timeout)
-            click.echo("")  # newline after progress
+            if reporter is None:
+                click.echo("")  # newline after progress
 
         if proc.returncode != 0:
             stderr_output = stderr_path.read_text()[-500:] if stderr_path.exists() else ""
-            click.echo(f"  Error: Final concat failed: {stderr_output}", err=True)
+            msg = f"Final concat failed: {stderr_output}"
+            if reporter is not None:
+                reporter.error(msg)
+            else:
+                click.echo(f"  Error: {msg}", err=True)
             return False
+        if reporter is not None:
+            reporter.phase_complete("compositing")
         return True
     except subprocess.TimeoutExpired:
         proc.kill()
-        click.echo(f"\n  Error: Final concat timed out after {timeout}s", err=True)
+        msg = f"Final concat timed out after {timeout}s"
+        if reporter is not None:
+            reporter.error(msg)
+        else:
+            click.echo(f"\n  Error: {msg}", err=True)
         return False
     except Exception as e:
-        click.echo(f"\n  Error: Final concat failed: {e}", err=True)
+        msg = f"Final concat failed: {e}"
+        if reporter is not None:
+            reporter.error(msg)
+        else:
+            click.echo(f"\n  Error: {msg}", err=True)
         return False
 
 

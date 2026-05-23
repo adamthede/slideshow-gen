@@ -57,6 +57,13 @@ def cli():
 @click.option("--recursive", "-r", is_flag=True, help="Recursively scan subdirectories for media files.")
 @click.option("--dry-run", is_flag=True, help="Print manifest without rendering.")
 @click.option("--estimate-only", is_flag=True, help="Scan + print duration/size estimate, then exit.")
+@click.option(
+    "--ipc",
+    is_flag=True,
+    help="Emit JSON-line events on stdout (one event per line) instead of human-readable progress. "
+         "Designed for an embedding process (the macOS app sidecar). "
+         "See docs/sidecar-protocol.md for the event schema.",
+)
 @click.option("--keep-temp", is_flag=True, help="Keep temp directory after render for debugging.")
 @click.option("--verbose", is_flag=True, help="Detailed progress output.")
 def render(
@@ -81,6 +88,7 @@ def render(
     recursive,
     dry_run,
     estimate_only,
+    ipc,
     keep_temp,
     verbose,
 ):
@@ -121,15 +129,18 @@ def render(
         items = sort_items(items, random=config.random_order)
         print_manifest(items, config, output)
     else:
+        from .events import ConsoleReporter, JsonReporter
         from .pipeline import RenderPipeline
 
         # Convert chunk duration from minutes to seconds
         chunk_secs = chunk_duration * 60 if chunk_duration else None
 
+        reporter = JsonReporter() if ipc else ConsoleReporter(verbose=verbose)
+
         pipeline = RenderPipeline(
             config=config, dirs=list(dirs), output=output,
             temp_base=temp_dir, chunk_seconds=chunk_secs,
             keep_temp=keep_temp, recursive=recursive,
-            estimate_only=estimate_only,
+            estimate_only=estimate_only, reporter=reporter,
         )
         pipeline.run()

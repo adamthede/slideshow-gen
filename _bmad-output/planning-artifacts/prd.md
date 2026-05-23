@@ -155,8 +155,8 @@ Stories:
 - E0.S2 — Audible-ducking acceptance test: synthetic test that probes peak volume during a known video-segment window and asserts the bg track is attenuated. Locks in the fix from `bb3dbec`.
 - E0.S3 — Render-time calibration: time the first N clips of phase 1, extrapolate, log an ETA. Lays groundwork for the app's render-time estimate.
 - E0.S4 — App stack decision: ADR capturing Tauri + React + shadcn + Python sidecar. *(Shipped: `docs/adr/0001-app-stack.md`.)*
-- E0.S5 — Engine API extraction: refactor `pipeline.py` so the orchestration is callable as a library (not just from `cli.py`). Clarifies the surface that the sidecar's IPC layer will expose.
-- E0.S6 — Sidecar IPC contract design: define the JSON-line event schema the frozen CLI emits over stdout (phase, progress, ETA, warnings, completion, error). Versioned. Documented under `docs/sidecar-protocol.md`. Implement behind a `--ipc` flag on the existing CLI so the sidecar and the developer-mode CLI stay one binary.
+- E0.S5 — Engine API extraction: `RenderPipeline` is now driven by an injected `Reporter` instead of bare `click.echo`. Same Python, but the engine is fully library-callable with no terminal coupling. *(Shipped.)*
+- E0.S6 — Sidecar IPC contract: `--ipc` flag emits versioned JSON-line events on stdout (`started`, `phase_started`, `discovery_complete`, `estimate`, `progress`, `phase_complete`, `info`, `warning`, `error`, `complete`). Schema documented in [`docs/sidecar-protocol.md`](../../docs/sidecar-protocol.md), locked by `tests/test_ipc_protocol.py`. *(Shipped.)*
 
 ### Epic 1 — Tauri shell + sidecar foundation
 
