@@ -41,7 +41,9 @@ The devices designed to display photos make the problem worse. Digital picture f
 
 Slideshow Gen solves this by converting photo archives into video — the one format every screen handles flawlessly. A single MP4 replaces thousands of loose files. A TV loops it all day. A digital picture frame plays it without crashing. The photos that were sitting forgotten in a folder are now on display, automatically enriched with dates and locations extracted from their own EXIF metadata.
 
-The engine is proven: a Python CLI validated on collections of 4,000+ images across years of use. Slideshow Gen for macOS wraps this engine in a native desktop application — replacing virtual environment management, file path memorization, and command-line flags with drag-and-drop folder selection and a single Render button. The workflow is: select folders, review a pre-render summary, hit render, and walk away.
+The engine is proven: a Python CLI validated on collections of 4,000+ images across years of use. **Marquee** is the macOS desktop application that wraps this engine — replacing virtual environment management, file path memorization, and command-line flags with drag-and-drop folder selection and a single Render button. The workflow is: select folders, review a pre-render summary, hit render, and walk away.
+
+**App identity:** Marquee · Bundle ID `com.thedetech.marquee` · Team `U85N54PC5J` (Thede Technologies, LLC) · signed with the existing `Developer ID Application` certificate, notarized via the `AC_PASSWORD` notarytool keychain profile.
 
 ### What Makes This Special
 
@@ -221,7 +223,7 @@ Stories:
 
 - Exclusion persistence: transient (v1 default) vs. sidecar JSON next to the folder (later)?
 - ~~CLI fate~~ — **Resolved by [ADR-0001](../../docs/adr/0001-app-stack.md):** Python CLI is the engine surface, frozen as a sidecar and embedded in a Tauri shell. No engine rewrite.
-- App name and bundle ID before E5.
+- ~~App name and bundle ID before E5~~ — **Resolved:** Marquee, `com.thedetech.marquee`.
 - Render-time estimate calibration strategy: per-machine cache vs. per-run warm-up. Default to per-run warm-up; cache later if it earns its complexity.
 - Sidecar packaging tradeoffs: PyInstaller one-file (simpler signing, slower cold start) vs. one-folder (faster start, every nested dylib needs signing). Decide in E1.S2.
 

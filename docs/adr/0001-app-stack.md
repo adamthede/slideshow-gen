@@ -4,6 +4,7 @@
 - **Date:** 2026-05-23
 - **Deciders:** Adam
 - **Supersedes:** the SwiftUI-rewrite assumption baked into the initial PRD scaffold
+- **App identity (resolved 2026-05-23):** Marquee · Bundle ID `com.thedetech.marquee` · Team `U85N54PC5J` (Thede Technologies, LLC) · signed with `Developer ID Application: ADAM SPENCER THEDE (U85N54PC5J)` · notarized via the `AC_PASSWORD` keychain profile.
 
 ## Context
 
