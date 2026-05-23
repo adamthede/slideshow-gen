@@ -319,12 +319,14 @@ class RenderPipeline:
         return segments
 
     def _prepare_video_clip(self, item: MediaItem) -> Path | None:
-        """Scale a video clip to output resolution and add overlays."""
+        """Scale a video clip to output resolution and add overlays.
+        Preserves audio and normalizes it for concatenation.
+        """
         output_path = self.temp_dir / f"temp-video-{item.path.stem}.mp4"
 
         # Build filter: scale + pad + fps + pixel format normalize + edge fades
         fade_dur = self.config.fade_duration
-        filters = [
+        v_filters = [
             f"scale=w={self.config.output_width}:h={self.config.output_height}"
             f":force_original_aspect_ratio=decrease:flags=lanczos",
             f"pad={self.config.output_width}:{self.config.output_height}:(ow-iw)/2:(oh-ih)/2",
@@ -334,8 +336,8 @@ class RenderPipeline:
 
         # Edge fades for concat assembly (skip if video is too short)
         if fade_dur > 0 and item.duration > fade_dur * 2:
-            filters.append(f"fade=t=in:st=0:d={fade_dur}")
-            filters.append(f"fade=t=out:st={item.duration - fade_dur}:d={fade_dur}")
+            v_filters.append(f"fade=t=in:st=0:d={fade_dur}")
+            v_filters.append(f"fade=t=out:st={item.duration - fade_dur}:d={fade_dur}")
 
         overlay_filters = generate_overlay_filters(
             date_str=item.display_date or None,
@@ -343,19 +345,41 @@ class RenderPipeline:
             config=self.config,
             is_video=True,
         )
-        filters.extend(overlay_filters)
+        v_filters.extend(overlay_filters)
 
+        # Base command
         cmd = [
             "ffmpeg", "-y", "-hide_banner",
             "-v", "warning" if not self.config.verbose else "info",
             "-i", str(item.path),
-            "-vf", ",".join(filters),
+        ]
+
+        if not item.has_audio:
+            cmd.extend(["-f", "lavfi", "-i", "anullsrc=channel_layout=stereo:sample_rate=48000"])
+            cmd.extend([
+                "-vf", ",".join(v_filters),
+                "-map", "0:v",
+                "-map", "1:a",
+            ])
+        else:
+            # Use apad to ensure the audio stream is at least as long as the video stream.
+            # -shortest will truncate the infinite padded audio when the video stream ends.
+            filter_complex = f"[0:v]{','.join(v_filters)}[v];[0:a]apad[a]"
+            cmd.extend([
+                "-filter_complex", filter_complex,
+                "-map", "[v]",
+                "-map", "[a]",
+            ])
+
+        cmd.extend([
             "-pix_fmt", "yuv420p",
             "-c:v", "h264_videotoolbox",
             "-b:v", "20M",
-            "-an",
+            "-c:a", "aac", "-b:a", "192k",
+            "-ac", "2", "-ar", "48000",
+            "-shortest",
             str(output_path),
-        ]
+        ])
 
         try:
             result = subprocess.run(cmd, capture_output=True, text=True, timeout=1800)
@@ -466,9 +490,17 @@ class RenderPipeline:
             cmd.extend([
                 "-stream_loop", "-1",
                 "-i", str(self.config.audio_track),
-                "-filter_complex", f"[1:a]volume={self.config.audio_volume}[bg];[0:a][bg]amix=inputs=2:duration=first:dropout_transition=0[a]",
+                "-filter_complex", 
+                f"[1:a]volume={self.config.audio_volume}[bg_vol];"
+                f"[bg_vol][0:a]sidechaincompress=threshold=0.08:ratio=4:attack=50:release=1000[bg_ducked];"
+                f"[0:a][bg_ducked]amix=inputs=2:duration=first:dropout_transition=0[a]",
                 "-map", "0:v",
                 "-map", "[a]"
+            ])
+        else:
+            cmd.extend([
+                "-map", "0:v",
+                "-map", "0:a",
             ])
 
         cmd.extend([
@@ -478,15 +510,6 @@ class RenderPipeline:
             "-movflags", "+faststart",
             str(self.output),
         ])
-
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=3600)
-        if result.returncode != 0:
-            click.echo(f"  Error: Final encode failed: {result.stderr[:300]}", err=True)
-",
-            "-movflags", "+faststart",
-            "-an",
-            str(self.output),
-        ]
 
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=3600)
         if result.returncode != 0:

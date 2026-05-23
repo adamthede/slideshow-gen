@@ -68,15 +68,24 @@ def render_image_to_clip(
     output_path = temp_dir / f"temp-slide-{index:04d}.mp4"
 
     # Build FFmpeg command — use hardware encoder for intermediates
+    # Inject silent audio track so it can be concatenated with video clips later
+    # Use -loop 1 to provide continuous frames for zoompan, and -t to hard-stop
+    # the encode at the exact slide duration.
+    duration = config.slide_duration
     cmd = [
         "ffmpeg", "-y", "-hide_banner",
         "-v", "warning" if not config.verbose else "info",
-        "-i", str(source),
-        "-filter_complex", full_filter,
+        "-loop", "1", "-i", str(source),
+        "-f", "lavfi", "-i", "anullsrc=channel_layout=stereo:sample_rate=48000",
+        "-vf", full_filter,
+        "-map", "0:v",
+        "-map", "1:a",
+        "-t", str(duration),
         "-pix_fmt", "yuv420p",
         "-c:v", "h264_videotoolbox",
         "-b:v", "20M",
-        "-an",
+        "-c:a", "aac", "-b:a", "192k",
+        "-ac", "2", "-ar", "48000",
         str(output_path),
     ]
 
@@ -237,6 +246,17 @@ def render_batch(
     # Force consistent pixel format for concat compatibility
     chains.append("[ov_final]format=pix_fmts=yuv420p[out]")
 
+    # Silent audio sized to match the video timeline exactly.
+    # Mixing the per-clip silent tracks via amix would produce only
+    # slide_duration of audio (all inputs start at t=0 with duration=longest),
+    # leaving the batch with video ≫ audio. Concat re-encoding then drifts
+    # the audio earlier and earlier across the timeline, which makes later
+    # video-segment audio play before its frames render.
+    chains.append(
+        f"anullsrc=channel_layout=stereo:sample_rate=48000"
+        f":d={batch_duration}[a_out]"
+    )
+
     # Write filter script
     script_path = temp_dir / f"temp-batch-script-{batch_index:04d}.txt"
     script_path.write_text(";\n".join(chains))
@@ -249,12 +269,14 @@ def render_batch(
         "-v", "warning" if not config.verbose else "info",
         *[arg for p in clip_paths for arg in ["-i", str(p)]],
         "-filter_complex_script", str(script_path),
-        "-t", str(batch_duration + fade_dur),
+        "-t", str(batch_duration),
         "-map", "[out]",
+        "-map", "[a_out]",
         "-pix_fmt", "yuv420p",
         "-c:v", "h264_videotoolbox",
         "-b:v", "20M",
-        "-an",
+        "-c:a", "aac", "-b:a", "192k",
+        "-ac", "2", "-ar", "48000",
         str(output_path),
     ]
 
@@ -438,7 +460,10 @@ def render_final_concat(
         cmd.extend([
             "-stream_loop", "-1",
             "-i", str(config.audio_track),
-            "-filter_complex", f"[1:a]volume={config.audio_volume}[bg];[0:a][bg]amix=inputs=2:duration=first:dropout_transition=0[a]",
+            "-filter_complex", 
+            f"[1:a]volume={config.audio_volume}[bg_vol];"
+            f"[bg_vol][0:a]sidechaincompress=threshold=0.08:ratio=4:attack=50:release=1000[bg_ducked];"
+            f"[0:a][bg_ducked]amix=inputs=2:duration=first:dropout_transition=0[a]",
             "-map", "0:v",
             "-map", "[a]"
         ])
