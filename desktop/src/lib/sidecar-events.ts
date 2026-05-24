@@ -44,6 +44,9 @@ export interface DiscoveryCompleteEvent extends BaseEvent {
   type: "discovery_complete";
   images: number;
   videos: number;
+  date_range?: { earliest: string; latest: string };
+  gps_coverage_percent?: number;
+  duplicates_removed?: number;
 }
 
 export interface EstimateEvent extends BaseEvent {

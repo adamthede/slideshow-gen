@@ -39,8 +39,19 @@ function summarize(event: SidecarEvent): string {
       return `phase: ${event.phase}${event.total != null ? ` (${event.total})` : ""}`;
     case "phase_complete":
       return `phase complete: ${event.phase}${event.message ? ` — ${event.message}` : ""}`;
-    case "discovery_complete":
-      return `discovery: ${event.images} images, ${event.videos} videos`;
+    case "discovery_complete": {
+      let msg = `discovery: ${event.images} images, ${event.videos} videos`;
+      if (event.date_range) {
+        msg += ` · ${event.date_range.earliest} to ${event.date_range.latest}`;
+      }
+      if (event.gps_coverage_percent !== undefined) {
+        msg += ` · ${event.gps_coverage_percent.toFixed(0)}% GPS`;
+      }
+      if (event.duplicates_removed !== undefined && event.duplicates_removed > 0) {
+        msg += ` · ${event.duplicates_removed} dupes`;
+      }
+      return msg;
+    }
     case "estimate":
       return `estimate: ${formatDuration(event.duration_s)} · ${formatSize(event.size_bytes)}`;
     case "progress":

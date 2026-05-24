@@ -15,7 +15,7 @@ from pathlib import Path
 import click
 
 from .config import RenderConfig
-from .discovery import MediaItem, scan_directories, sort_items
+from .discovery import MediaItem, detect_duplicates, scan_directories, sort_items
 from .estimate import estimate_output
 from .events import ConsoleReporter, Reporter
 from .ffmpeg import (
@@ -77,7 +77,31 @@ class RenderPipeline:
 
         images = [i for i in items if i.media_type == "image"]
         videos = [i for i in items if i.media_type == "video"]
-        self.reporter.discovery_complete(len(images), len(videos))
+
+        # Compute date range
+        date_range = None
+        if items:
+            parsed_dates = [i.parsed_date for i in items if i.parsed_date]
+            if parsed_dates:
+                earliest = min(parsed_dates)
+                latest = max(parsed_dates)
+                date_range = (earliest.isoformat(), latest.isoformat())
+
+        # Compute GPS coverage %
+        gps_items = sum(1 for i in items if i.gps_lat and i.gps_lon)
+        gps_coverage = (gps_items / len(items) * 100) if items else 0
+
+        # Detect duplicates
+        duplicates = detect_duplicates(items)
+        dupes_removed = len(duplicates)
+
+        self.reporter.discovery_complete(
+            len(images),
+            len(videos),
+            date_range=date_range,
+            gps_coverage_percent=gps_coverage,
+            duplicates_removed=dupes_removed,
+        )
 
         # Pre-render estimate (deterministic, no FFmpeg).
         est = estimate_output(items, self.config)
