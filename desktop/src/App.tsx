@@ -130,8 +130,14 @@ function App() {
     if (folder) await start(folder);
   }
 
-  const { discovery, estimate, progress, phase, error, running, done } = state;
+  const { discovery, estimate, progress, phase, error, running } = state;
   const hasResults = discovery !== null || estimate !== null;
+
+  function truncateMiddle(path: string, max = 80): string {
+    if (path.length <= max) return path;
+    const half = Math.floor((max - 1) / 2);
+    return `${path.slice(0, half)}…${path.slice(-half)}`;
+  }
 
   return (
     <main className="min-h-screen bg-background text-foreground p-8">
@@ -162,12 +168,15 @@ function App() {
                 Choose folder
               </Button>
               <Button onClick={runScan} disabled={!folder || running}>
-                {running ? "Scanning…" : "Scan"}
+                {running ? "Scanning…" : hasResults ? "Re-scan" : "Scan"}
               </Button>
             </div>
             {folder && (
-              <p className="text-xs text-muted-foreground break-all font-mono">
-                {folder}
+              <p
+                className="text-xs text-muted-foreground font-mono truncate"
+                title={folder}
+              >
+                {truncateMiddle(folder)}
               </p>
             )}
           </CardContent>
@@ -245,7 +254,7 @@ function App() {
                 Predicted output (within ±20% on typical inputs).
               </CardDescription>
             </CardHeader>
-            <CardContent className="grid grid-cols-2 md:grid-cols-3 gap-6">
+            <CardContent className="grid grid-cols-2 gap-6">
               <Stat
                 label="Duration"
                 value={formatDuration(estimate.duration_s)}
@@ -253,10 +262,6 @@ function App() {
               <Stat
                 label="File size"
                 value={formatSize(estimate.size_bytes)}
-              />
-              <Stat
-                label="Status"
-                value={done ? "ready" : running ? "scanning" : "idle"}
               />
             </CardContent>
           </Card>
