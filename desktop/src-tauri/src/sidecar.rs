@@ -55,10 +55,10 @@ pub fn parse_sidecar_line(line: &str) -> Option<Value> {
     let value: Value = serde_json::from_str(trimmed).ok()?;
     let obj = value.as_object()?;
 
-    // Required fields per protocol.
-    if !obj.contains_key("type") {
-        return None;
-    }
+    // Required: a string `type` field. A bare `"type": 42` is malformed
+    // per docs/sidecar-protocol.md and would mis-handle on the TS side.
+    obj.get("type").and_then(|v| v.as_str())?;
+
     // Version check — additive changes (new event types, new optional
     // fields) won't bump v. A v=2 means a breaking change we don't know.
     let v = obj.get("v").and_then(|x| x.as_i64()).unwrap_or(0);
@@ -231,6 +231,15 @@ mod tests {
     #[test]
     fn rejects_object_without_type() {
         assert!(parse_sidecar_line(r#"{"v":1,"t":0}"#).is_none());
+    }
+
+    #[test]
+    fn rejects_non_string_type() {
+        // Protocol requires `type` to be a string; a number-typed `type`
+        // is malformed and must not forward as a `kind:"event"`.
+        assert!(parse_sidecar_line(r#"{"v":1,"t":0,"type":42}"#).is_none());
+        assert!(parse_sidecar_line(r#"{"v":1,"t":0,"type":null}"#).is_none());
+        assert!(parse_sidecar_line(r#"{"v":1,"t":0,"type":{}}"#).is_none());
     }
 
     #[test]

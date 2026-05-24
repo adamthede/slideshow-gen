@@ -29,10 +29,14 @@ function formatSize(bytes: number): string {
 
 function summarize(event: SidecarEvent): string {
   switch (event.type) {
-    case "started":
-      return `started · ${event.config.resolution ?? "?"} · slide ${event.config.slide_duration}s`;
+    case "started": {
+      const res = event.config.resolution ?? "?";
+      const slide = event.config.slide_duration;
+      const slideStr = typeof slide === "number" ? `${slide}s` : "?";
+      return `started · ${res} · slide ${slideStr}`;
+    }
     case "phase_started":
-      return `phase: ${event.phase}${event.total !== null ? ` (${event.total})` : ""}`;
+      return `phase: ${event.phase}${event.total != null ? ` (${event.total})` : ""}`;
     case "phase_complete":
       return `phase complete: ${event.phase}${event.message ? ` — ${event.message}` : ""}`;
     case "discovery_complete":
@@ -49,6 +53,13 @@ function summarize(event: SidecarEvent): string {
       return `error: ${event.message}`;
     case "complete":
       return `complete: ${event.outputs.length} output(s), ${formatDuration(event.elapsed_s)}`;
+    default: {
+      // Forward-compat: an additive protocol change could introduce a
+      // new event type the Rust bridge passes through. Print rather than
+      // silently render undefined.
+      const unknown = event as { type?: unknown };
+      return `unknown event: ${JSON.stringify(unknown)}`;
+    }
   }
 }
 

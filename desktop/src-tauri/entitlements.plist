@@ -9,12 +9,11 @@
   <key>com.apple.security.cs.disable-library-validation</key>
   <true/>
 
-  <!-- Allow the shell to spawn the sidecar binary. -->
-  <key>com.apple.security.cs.allow-unsigned-executable-memory</key>
-  <false/>
-
   <!-- App is not sandboxed for v1 (Tauri direct-download distribution).
        File access works via Tauri's dialog plugin and full-disk Finder
-       paths, not security-scoped bookmarks. -->
+       paths, not security-scoped bookmarks.
+       Sidecar spawn does not require any extra entitlement under the
+       hardened runtime — it works by default once library-validation
+       is relaxed above. -->
 </dict>
 </plist>
