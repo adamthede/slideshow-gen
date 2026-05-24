@@ -3,6 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import {
   SIDECAR_EVENT_CHANNEL,
+  type DiscoveryCompleteEvent,
   type EstimateEvent,
   type SidecarEvent,
   type SidecarMessage,
@@ -17,6 +18,8 @@ export interface SidecarState {
   phase: string | null;
   /** Latest progress tick, or null. */
   progress: { done: number; total: number; phase: string } | null;
+  /** Latest discovery_complete event, or null. */
+  discovery: DiscoveryCompleteEvent | null;
   /** Latest estimate event, or null. */
   estimate: EstimateEvent | null;
   /** Latest error message, or null. */
@@ -34,6 +37,7 @@ const initialState: SidecarState = {
   diagnostics: [],
   phase: null,
   progress: null,
+  discovery: null,
   estimate: null,
   error: null,
   done: false,
@@ -111,6 +115,9 @@ function reduce(prev: SidecarState, msg: SidecarMessage): SidecarState {
             total: event.total,
             phase: event.phase,
           };
+          break;
+        case "discovery_complete":
+          next.discovery = event;
           break;
         case "estimate":
           next.estimate = event;
