@@ -52,7 +52,15 @@ if [ "${#dmg_candidates[@]}" -eq 0 ]; then
   exit 1
 fi
 
-DMG=$(printf '%s\n' "${dmg_candidates[@]}" | xargs ls -t | head -1)
+# Pick the newest by mtime. Pure bash so paths with spaces (the repo
+# parent is "Project - Slideshow Generator") survive intact — earlier
+# `printf | xargs ls -t` whitespace-split the paths and broke the build.
+DMG="${dmg_candidates[0]}"
+for f in "${dmg_candidates[@]}"; do
+  if [ "$f" -nt "$DMG" ]; then
+    DMG="$f"
+  fi
+done
 
 if [ ! -f "$DMG" ]; then
   echo "[release] ERROR: Resolved DMG path is not a regular file: $DMG"
