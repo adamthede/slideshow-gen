@@ -159,25 +159,29 @@ function App() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <pre className="text-xs bg-muted/40 rounded-md p-3 max-h-96 overflow-auto font-mono whitespace-pre-wrap">
+            <div
+              role="log"
+              aria-live="polite"
+              className="text-xs bg-muted/40 rounded-md p-3 max-h-96 overflow-auto font-mono whitespace-pre-wrap"
+            >
               {state.events.length === 0
                 ? "(no events yet — pick a folder and click Run scan)"
                 : state.events.map((e, i) => (
                     <div key={i}>{summarize(e)}</div>
                   ))}
-            </pre>
+            </div>
             {state.diagnostics.length > 0 && (
               <details className="mt-3 text-xs">
                 <summary className="cursor-pointer text-muted-foreground">
                   Diagnostics ({state.diagnostics.length})
                 </summary>
-                <pre className="mt-2 bg-muted/40 rounded-md p-3 max-h-48 overflow-auto font-mono whitespace-pre-wrap">
+                <div className="mt-2 bg-muted/40 rounded-md p-3 max-h-48 overflow-auto font-mono whitespace-pre-wrap">
                   {state.diagnostics.map((d, i) => (
                     <div key={i}>
                       [{d.source}] {d.line}
                     </div>
                   ))}
-                </pre>
+                </div>
               </details>
             )}
           </CardContent>

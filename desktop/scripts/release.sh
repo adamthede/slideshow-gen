@@ -33,14 +33,29 @@ cd "$DESKTOP_DIR"
 npm run tauri build -- --bundles app,dmg
 
 APP="$DESKTOP_DIR/src-tauri/target/release/bundle/macos/Marquee.app"
-DMG=$(ls "$DESKTOP_DIR/src-tauri/target/release/bundle/dmg/"Marquee_*.dmg | head -1)
+DMG_DIR="$DESKTOP_DIR/src-tauri/target/release/bundle/dmg"
 
 if [ ! -d "$APP" ]; then
   echo "[release] ERROR: $APP not found after build."
   exit 1
 fi
+
+# Resolve the DMG robustly under set -euo pipefail. Use nullglob so a
+# missing match yields an empty array (instead of crashing the pipeline),
+# then pick the newest by mtime so a stale prior build can't win.
+shopt -s nullglob
+dmg_candidates=("$DMG_DIR"/Marquee_*.dmg)
+shopt -u nullglob
+
+if [ "${#dmg_candidates[@]}" -eq 0 ]; then
+  echo "[release] ERROR: No Marquee_*.dmg found in $DMG_DIR"
+  exit 1
+fi
+
+DMG=$(printf '%s\n' "${dmg_candidates[@]}" | xargs ls -t | head -1)
+
 if [ ! -f "$DMG" ]; then
-  echo "[release] ERROR: DMG not found in src-tauri/target/release/bundle/dmg/"
+  echo "[release] ERROR: Resolved DMG path is not a regular file: $DMG"
   exit 1
 fi
 

@@ -22,7 +22,6 @@ See [ADR-0001](../docs/adr/0001-app-stack.md) for the stack decision, [ADR-0002]
 - Python 3.11 with the project's `.venv` activated (`source ../.venv/bin/activate`)
 - PyInstaller (`pip install pyinstaller`)
 - `xcrun` / Xcode command-line tools
-- `create-dmg` (optional, only for `release.sh`): `brew install create-dmg`
 
 ## Dev loop
 
@@ -34,7 +33,7 @@ npm install
 npm run tauri dev
 ```
 
-`npm run tauri dev` runs Vite + the Tauri shell. The Rust shell expects the sidecar binary at `src-tauri/binaries/slideshow-gen-aarch64-apple-darwin`. A placeholder stub is checked in so `cargo check` passes; the real frozen binary must be built before the app does anything useful.
+`npm run tauri dev` runs Vite + the Tauri shell. The Rust shell expects the sidecar binary at `src-tauri/binaries/slideshow-gen-aarch64-apple-darwin`. That path is gitignored — run `./scripts/build-sidecar.sh` before `cargo check` / `npm run tauri dev` / `npm run tauri build` so the binary exists.
 
 ## Sidecar build
 

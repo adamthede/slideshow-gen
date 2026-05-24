@@ -69,6 +69,41 @@ pub fn parse_sidecar_line(line: &str) -> Option<Value> {
     Some(value)
 }
 
+/// Drain complete newline-terminated lines from a byte buffer.
+///
+/// Tauri's `CommandEvent::Stdout`/`Stderr` deliver arbitrary byte chunks
+/// from the OS pipe. A single read may contain a partial line, multiple
+/// lines, or end mid-multi-byte-UTF-8 character. We append to a persistent
+/// buffer and only emit at `\n` boundaries — that way a line is always
+/// converted from UTF-8 as a single unit, and partial reads are preserved
+/// across chunks.
+///
+/// Trailing partial data stays in `buf` for the next chunk. Callers must
+/// flush any remainder on stream close.
+pub fn extract_lines(buf: &mut Vec<u8>) -> Vec<String> {
+    let mut out = Vec::new();
+    while let Some(nl) = buf.iter().position(|&b| b == b'\n') {
+        let drained: Vec<u8> = buf.drain(..=nl).collect();
+        let end = drained
+            .iter()
+            .rposition(|&b| b != b'\n' && b != b'\r')
+            .map(|i| i + 1)
+            .unwrap_or(0);
+        out.push(String::from_utf8_lossy(&drained[..end]).into_owned());
+    }
+    out
+}
+
+fn classify_stdout_line(line: String) -> Option<SidecarMessage> {
+    if line.trim().is_empty() {
+        return None;
+    }
+    Some(match parse_sidecar_line(&line) {
+        Some(payload) => SidecarMessage::Event { payload },
+        None => SidecarMessage::Raw { line },
+    })
+}
+
 /// Spawn the sidecar with the given arguments and wire its stdout/stderr
 /// to the frontend via `SIDECAR_EVENT`.
 ///
@@ -76,12 +111,12 @@ pub fn parse_sidecar_line(line: &str) -> Option<Value> {
 pub fn spawn_sidecar(app: &AppHandle, args: Vec<String>) -> Result<(), String> {
     let state = app.state::<SidecarState>();
 
-    // Refuse to start a second scan while one is in flight.
-    {
-        let guard = state.child.lock().map_err(|e| e.to_string())?;
-        if guard.is_some() {
-            return Err("A scan is already running".into());
-        }
+    // Hold the mutex across check + spawn + set so two concurrent
+    // `start_scan` calls can't both pass the is_some() check and end up
+    // spawning multiple sidecars (TOCTOU race).
+    let mut guard = state.child.lock().map_err(|e| e.to_string())?;
+    if guard.is_some() {
+        return Err("A scan is already running".into());
     }
 
     let sidecar = app
@@ -94,44 +129,74 @@ pub fn spawn_sidecar(app: &AppHandle, args: Vec<String>) -> Result<(), String> {
         .spawn()
         .map_err(|e| format!("Failed to spawn sidecar: {e}"))?;
 
-    *state.child.lock().map_err(|e| e.to_string())? = Some(child);
+    *guard = Some(child);
+    drop(guard);
 
     let app_handle = app.clone();
     tauri::async_runtime::spawn(async move {
-        while let Some(event) = rx.recv().await {
-            let message = match event {
-                CommandEvent::Stdout(bytes) => {
-                    let line = String::from_utf8_lossy(&bytes).to_string();
-                    match parse_sidecar_line(&line) {
-                        Some(payload) => SidecarMessage::Event { payload },
-                        None => SidecarMessage::Raw { line },
-                    }
-                }
-                CommandEvent::Stderr(bytes) => SidecarMessage::Stderr {
-                    line: String::from_utf8_lossy(&bytes).to_string(),
-                },
-                CommandEvent::Terminated(payload) => SidecarMessage::Exit {
-                    code: payload.code,
-                    success: payload.code == Some(0),
-                },
-                CommandEvent::Error(err) => SidecarMessage::Stderr {
-                    line: format!("sidecar runtime error: {err}"),
-                },
-                // Forward-compat: future CommandEvent variants are ignored.
-                _ => continue,
-            };
+        let mut stdout_buf: Vec<u8> = Vec::new();
+        let mut stderr_buf: Vec<u8> = Vec::new();
 
-            if let Err(e) = app_handle.emit(SIDECAR_EVENT, &message) {
+        let emit = |message: &SidecarMessage| {
+            if let Err(e) = app_handle.emit(SIDECAR_EVENT, message) {
                 eprintln!("[marquee] failed to emit sidecar event: {e}");
             }
+        };
 
-            // On exit, clear the in-flight child handle.
-            if matches!(message, SidecarMessage::Exit { .. }) {
-                if let Some(state) = app_handle.try_state::<SidecarState>() {
-                    if let Ok(mut guard) = state.child.lock() {
-                        *guard = None;
+        while let Some(event) = rx.recv().await {
+            match event {
+                CommandEvent::Stdout(bytes) => {
+                    stdout_buf.extend_from_slice(&bytes);
+                    for line in extract_lines(&mut stdout_buf) {
+                        if let Some(msg) = classify_stdout_line(line) {
+                            emit(&msg);
+                        }
                     }
                 }
+                CommandEvent::Stderr(bytes) => {
+                    stderr_buf.extend_from_slice(&bytes);
+                    for line in extract_lines(&mut stderr_buf) {
+                        if !line.trim().is_empty() {
+                            emit(&SidecarMessage::Stderr { line });
+                        }
+                    }
+                }
+                CommandEvent::Terminated(payload) => {
+                    // Flush any trailing partial lines (last line may have
+                    // no terminating newline).
+                    if !stdout_buf.is_empty() {
+                        let line = String::from_utf8_lossy(&stdout_buf).into_owned();
+                        stdout_buf.clear();
+                        if let Some(msg) = classify_stdout_line(line) {
+                            emit(&msg);
+                        }
+                    }
+                    if !stderr_buf.is_empty() {
+                        let line = String::from_utf8_lossy(&stderr_buf).into_owned();
+                        stderr_buf.clear();
+                        if !line.trim().is_empty() {
+                            emit(&SidecarMessage::Stderr { line });
+                        }
+                    }
+
+                    let exit_msg = SidecarMessage::Exit {
+                        code: payload.code,
+                        success: payload.code == Some(0),
+                    };
+                    emit(&exit_msg);
+
+                    if let Some(state) = app_handle.try_state::<SidecarState>() {
+                        if let Ok(mut guard) = state.child.lock() {
+                            *guard = None;
+                        }
+                    }
+                }
+                CommandEvent::Error(err) => {
+                    emit(&SidecarMessage::Stderr {
+                        line: format!("sidecar runtime error: {err}"),
+                    });
+                }
+                _ => continue,
             }
         }
     });
@@ -179,6 +244,73 @@ mod tests {
         // Defensive: missing v shouldn't crash; treat as legacy/v0 which is < 1.
         let line = r#"{"t":0,"type":"info","message":"hi"}"#;
         assert!(parse_sidecar_line(line).is_some());
+    }
+
+    #[test]
+    fn extract_lines_single_complete_line() {
+        let mut buf = b"hello\n".to_vec();
+        let lines = extract_lines(&mut buf);
+        assert_eq!(lines, vec!["hello".to_string()]);
+        assert!(buf.is_empty());
+    }
+
+    #[test]
+    fn extract_lines_multiple_in_one_chunk() {
+        let mut buf = b"a\nb\nc\n".to_vec();
+        let lines = extract_lines(&mut buf);
+        assert_eq!(lines, vec!["a".to_string(), "b".to_string(), "c".to_string()]);
+        assert!(buf.is_empty());
+    }
+
+    #[test]
+    fn extract_lines_preserves_partial_trailing() {
+        let mut buf = b"complete\npartial".to_vec();
+        let lines = extract_lines(&mut buf);
+        assert_eq!(lines, vec!["complete".to_string()]);
+        assert_eq!(buf, b"partial");
+    }
+
+    #[test]
+    fn extract_lines_joins_across_chunks() {
+        let mut buf = Vec::new();
+        buf.extend_from_slice(b"par");
+        assert!(extract_lines(&mut buf).is_empty());
+        buf.extend_from_slice(b"tial\n");
+        let lines = extract_lines(&mut buf);
+        assert_eq!(lines, vec!["partial".to_string()]);
+        assert!(buf.is_empty());
+    }
+
+    #[test]
+    fn extract_lines_handles_split_multibyte_utf8() {
+        // "Müller" — ü is C3 BC. Split between the two bytes across chunks
+        // would corrupt under naive from_utf8_lossy(chunk).
+        let mut buf = Vec::new();
+        buf.extend_from_slice(b"M\xC3");
+        assert!(extract_lines(&mut buf).is_empty());
+        buf.extend_from_slice(b"\xBCller\n");
+        let lines = extract_lines(&mut buf);
+        assert_eq!(lines, vec!["Müller".to_string()]);
+    }
+
+    #[test]
+    fn extract_lines_strips_crlf() {
+        let mut buf = b"line\r\n".to_vec();
+        let lines = extract_lines(&mut buf);
+        assert_eq!(lines, vec!["line".to_string()]);
+    }
+
+    #[test]
+    fn classify_stdout_skips_empty_and_whitespace() {
+        assert!(classify_stdout_line(String::new()).is_none());
+        assert!(classify_stdout_line("   ".into()).is_none());
+        assert!(classify_stdout_line("\t\t".into()).is_none());
+    }
+
+    #[test]
+    fn classify_stdout_treats_unparseable_as_raw() {
+        let msg = classify_stdout_line("not json".into()).expect("should be raw");
+        assert!(matches!(msg, SidecarMessage::Raw { .. }));
     }
 
     #[test]

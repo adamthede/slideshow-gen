@@ -94,7 +94,7 @@ The entitlement is in `desktop/src-tauri/entitlements.plist` and is applied to b
 ### Operational
 
 - The sidecar binary is `.gitignored` — every build produces it locally or in CI (E5.S1). Source of truth is the spec file + build script, both checked in.
-- A placeholder stub is checked in at `desktop/src-tauri/binaries/slideshow-gen-aarch64-apple-darwin` so `cargo check` and IDEs work without a full sidecar build.
+- Before `cargo check`, `npm run tauri dev`, or `npm run tauri build`, run `./scripts/build-sidecar.sh` once so the expected `desktop/src-tauri/binaries/slideshow-gen-aarch64-apple-darwin` path exists. No stub is checked in — the build script is fast enough that materializing the real binary is the right default.
 
 ## Follow-ups (carried into later epics)
 
