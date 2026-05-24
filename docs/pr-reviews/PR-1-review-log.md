@@ -7,23 +7,25 @@
 | Cycle | Date | Found | Actioned | Dismissed | Skipped | Commit | Ratio |
 |-------|------|-------|----------|-----------|---------|--------|-------|
 | 1 | 2026-05-24 02:00 | 14 | 11 | 2 | 1 | e112f59 | 79% |
+| 2 | 2026-05-24 02:15 | 8 | 4 | 1 | 3 | 021eaaa | 50% |
 
 ## Reviewer Effectiveness
 | Reviewer | Total Found | T1 (Must) | T2 (Should) | T3 (Consider) | T4 (Dismiss) | Actioned % | Signal:Noise |
 |----------|------------|-----------|-------------|---------------|-------------|-----------|-------------|
-| Copilot | 10 | 2 | 8 | 0 | 0 | 100% | 10:0 |
-| Gemini | 4 | 0 | 1 | 1 | 2 | 25% | 1:3 |
+| Copilot | 15 | 2 | 12 | 0 | 1 | 93% | 14:1 |
+| Gemini | 7 | 0 | 1 | 3 | 3 | 14% | 1:6 |
 
 ## Issue Categories (Cumulative)
 | Category | T1 | T2 | T3 | T4 | Total | % of All |
 |----------|----|----|----|----|-------|----------|
-| security | 1 | 0 | 0 | 0 | 1 | 7% |
-| data-integrity | 1 | 0 | 1 | 0 | 2 | 14% |
-| error-handling | 0 | 3 | 0 | 0 | 3 | 21% |
-| documentation | 0 | 4 | 0 | 0 | 4 | 29% |
-| style | 0 | 2 | 0 | 2 | 4 | 29% |
+| security | 1 | 0 | 0 | 0 | 1 | 5% |
+| data-integrity | 1 | 0 | 1 | 0 | 2 | 9% |
+| error-handling | 0 | 5 | 0 | 0 | 5 | 23% |
+| documentation | 0 | 5 | 0 | 0 | 5 | 23% |
+| style | 0 | 4 | 1 | 3 | 8 | 36% |
+| performance | 0 | 0 | 2 | 0 | 2 | 9% |
 
-**Status:** IN PROGRESS (cycle 1 complete, awaiting bot re-review)
+**Status:** TIME BUDGET EXCEEDED — exiting after cycle 2. PR is in good shape (22/22 threads resolved, all T1/T2 actioned across both cycles, 15 Rust tests + clean TS build). Any further bot replies after the cycle-2 push can be handled by re-invoking `/review-cycle 1`.
 
 ## Cycle 1 — 2026-05-24 02:00
 
@@ -154,3 +156,79 @@ No prior PR review logs exist in this repository — cycle 1 is the baseline. Fu
 ### Commit
 SHA: e112f59
 Message: fix: Address PR review cycle 1 — security, races, IPC robustness, docs
+
+## Cycle 2 — 2026-05-24 02:15
+
+### Actioned (4)
+
+#### T2-SHOULD: Misleading entitlement comment + unused key
+- **File:** `desktop/src-tauri/entitlements.plist:12`
+- **Category:** `documentation`
+- **Reviewer:** Copilot (`copilot-pull-request-reviewer`)
+- **Comment:** "In entitlements.plist, the comment says this key 'Allow[s] the shell to spawn the sidecar binary', but `com.apple.security.cs.allow-unsigned-executable-memory` controls unsigned executable memory/JIT behavior and is unrelated to spawning sidecars..."
+- **Disposition:** FIXED — removed the key entirely (was set to `false`, doing nothing); replaced the misleading comment with an accurate note that sidecar spawn needs no extra entitlement once library-validation is relaxed.
+- **Thread ID:** PRRT_kwDOR-Xvl86EWRpH
+
+#### T2-SHOULD: @ts-expect-error suppression on process.env (vite.config.ts)
+- **File:** `desktop/vite.config.ts:6` (and `desktop/tsconfig.node.json:7`)
+- **Category:** `style`
+- **Reviewer:** Copilot (`copilot-pull-request-reviewer`)
+- **Comment:** "vite.config.ts suppresses a type error for `process` with `@ts-expect-error`. Prefer fixing the Node typings instead..."
+- **Disposition:** FIXED — added `"types": ["node"]` to tsconfig.node.json; removed the `@ts-expect-error` suppression in vite.config.ts. Type-safe access to `process.env.TAURI_DEV_HOST`.
+- **Thread IDs:** PRRT_kwDOR-Xvl86EWRpL, PRRT_kwDOR-Xvl86EWRpV
+
+#### T2-SHOULD: parse_sidecar_line doesn't validate `type` is a string
+- **File:** `desktop/src-tauri/src/sidecar.rs:61`
+- **Category:** `error-handling`
+- **Reviewer:** Copilot (`copilot-pull-request-reviewer`)
+- **Comment:** "`parse_sidecar_line` only checks that a `type` key exists, but does not validate that `type` is actually a string... That can cause non-protocol JSON objects to be forwarded as `kind:'event'` and then mis-handled by the TS side."
+- **Disposition:** FIXED — `obj.get("type").and_then(|v| v.as_str())?` now requires `type` to be present AND a string. Added `rejects_non_string_type` test covering number, null, and object payloads.
+- **Thread ID:** PRRT_kwDOR-Xvl86EWRpO
+
+#### T2-SHOULD: summarize() may render `undefined` for optional fields or unknown events
+- **File:** `desktop/src/App.tsx:33`
+- **Category:** `error-handling`
+- **Reviewer:** Copilot (`copilot-pull-request-reviewer`)
+- **Comment:** "In `summarize()`, the `started` line interpolates `event.config.slide_duration` directly, but `slide_duration` is optional... Also, because the Rust bridge currently forwards any JSON with `v<=1` and a `type` field, a future additive protocol change (new `type` with v=1) would make this switch return `undefined` at runtime."
+- **Disposition:** FIXED — `started` branch guards `slide_duration` with `typeof === "number"` check (renders "?" otherwise); added a `default:` branch that JSON-stringifies unknown event payloads so a future additive protocol event surfaces visibly instead of silently rendering undefined.
+- **Thread ID:** PRRT_kwDOR-Xvl86EWRpS
+
+### Dismissed (1)
+
+#### T4-DISMISS: index as React key in append-only event log
+- **File:** `desktop/src/App.tsx:170`
+- **Category:** `style`
+- **Reviewer:** Gemini (`gemini-code-assist`)
+- **Disposition:** DISMISSED — index keys are stable for an append-only list with no reorder or filter. The "discouraged" guidance applies to lists that mutate in the middle; ours doesn't.
+- **Thread ID:** PRRT_kwDOR-Xvl86EWRRk
+
+### Skipped (3)
+
+#### T3-CONSIDER: useSidecar events array spread is O(N) per event
+- **File:** `desktop/src/hooks/useSidecar.ts:99`
+- **Category:** `performance`
+- **Reviewer:** Gemini (`gemini-code-assist`)
+- **Disposition:** SKIPPED — E1 emits ~5 events via `--estimate-only`; the spread is immaterial here. The smoke UI and the hook are both targets for redesign in E2, where progress-event throttling or a ring buffer would land naturally. Re-evaluate then.
+- **Thread ID:** PRRT_kwDOR-Xvl86EWRRj
+
+#### T3-CONSIDER: extract_lines drain.collect allocates per line
+- **File:** `desktop/src-tauri/src/sidecar.rs:86`
+- **Category:** `performance`
+- **Reviewer:** Gemini (`gemini-code-assist`)
+- **Disposition:** SKIPPED — micro-optimization. Per-line allocs are ~100 bytes and the suggested slice-based rewrite would entangle correctness (the buffer needs to be both mutated and partially borrowed). Revisit only if profiling under E4 real-render volume shows it as a hotspot.
+- **Thread ID:** PRRT_kwDOR-Xvl86EWRRl
+
+#### T3-CONSIDER (carried from cycle 1): tmp filename collision in start_scan
+- **File:** `desktop/src-tauri/src/lib.rs:17`
+- **Category:** `data-integrity`
+- **Reviewer:** Gemini (`gemini-code-assist`)
+- **Disposition:** SKIPPED (still) — same reasoning as cycle 1; estimate-only never writes the path. Fix lands with E4 real-render work.
+- **Thread ID:** PRRT_kwDOR-Xvl86EV3lB (resolved in cycle 1)
+
+### Recurrence Patterns
+- **Pattern emerging:** `error-handling` issues in the IPC bridge layer (parse validation, partial reads, default-branch handling) accounted for 2/4 cycle-1 T2s and 2/4 cycle-2 T2s. Worth establishing a convention: any new IPC event surface (Rust parser, TS hook reducer) gets a default/unknown branch by default rather than as a follow-up fix. Add to `desktop/README.md` "conventions" section if a third recurrence appears.
+- **Single-PR baseline still** — no cross-PR recurrence data yet.
+
+### Commit
+SHA: 021eaaa
+Message: fix: Address PR review cycle 2 — entitlements, type safety, IPC validation
