@@ -62,12 +62,11 @@ class RenderPipeline:
             "audio_track": str(self.config.audio_track) if self.config.audio_track else None,
         })
 
-        # Preflight checks
-        if not check_ffmpeg():
-            self.reporter.error("FFmpeg not found. Install via: brew install ffmpeg")
-            return
-
-        # Discover media
+        # Discover media — FFmpeg isn't needed here (discovery uses PIL/ExifRead
+        # for images and optionally ffprobe per video, which fails gracefully
+        # per-file). Defer the hard FFmpeg preflight until we know we're about
+        # to render — that way `--estimate-only` works even on machines where
+        # ffmpeg isn't on PATH (e.g. inside a macOS .app's subprocess env).
         self.reporter.phase_started("discovery")
         items = scan_directories(self.dirs, verbose=self.config.verbose, recursive=self.recursive)
         items = sort_items(items, random=self.config.random_order)
@@ -80,7 +79,7 @@ class RenderPipeline:
         videos = [i for i in items if i.media_type == "video"]
         self.reporter.discovery_complete(len(images), len(videos))
 
-        # Pre-render estimate
+        # Pre-render estimate (deterministic, no FFmpeg).
         est = estimate_output(items, self.config)
         self.reporter.estimate(
             duration_s=est.total_duration_s,
@@ -91,6 +90,11 @@ class RenderPipeline:
 
         if self.estimate_only:
             self.reporter.info("--estimate-only: exiting before render.")
+            return
+
+        # Now that we're committed to a real render, require FFmpeg.
+        if not check_ffmpeg():
+            self.reporter.error("FFmpeg not found. Install via: brew install ffmpeg")
             return
 
         # Create temp directory
