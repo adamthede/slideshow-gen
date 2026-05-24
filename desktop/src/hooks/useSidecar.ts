@@ -75,19 +75,22 @@ export function useSidecar() {
     };
   }, []);
 
-  const start = useCallback(async (folder: string) => {
-    setState({ ...initialState, running: true });
-    try {
-      await invoke("start_scan", { folder });
-    } catch (err) {
-      setState((prev) => ({
-        ...prev,
-        running: false,
-        done: true,
-        error: typeof err === "string" ? err : String(err),
-      }));
-    }
-  }, []);
+  const start = useCallback(
+    async (folder: string, settings?: Record<string, unknown>) => {
+      setState({ ...initialState, running: true });
+      try {
+        await invoke("start_scan", { folder, settings });
+      } catch (err) {
+        setState((prev) => ({
+          ...prev,
+          running: false,
+          done: true,
+          error: typeof err === "string" ? err : String(err),
+        }));
+      }
+    },
+    [],
+  );
 
   const reset = useCallback(() => setState(initialState), []);
 

@@ -1,14 +1,32 @@
 mod sidecar;
 
+use serde::Deserialize;
 use sidecar::{spawn_sidecar, SidecarState};
 
-/// Start a scan against a folder. For E1 this is always
-/// `render --ipc --estimate-only` against the chosen folder — proves
-/// the full sidecar/IPC pipeline without rendering a real MP4.
+/// Render settings the frontend can override. Each field is optional —
+/// `None` means "let the CLI use its default", so the Rust shell never
+/// has to track default values itself.
+#[derive(Debug, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ScanSettings {
+    /// `"1080p"` or `"4k"` — passed verbatim to `--resolution`.
+    resolution: Option<String>,
+    slide_duration: Option<f64>,
+    fade_duration: Option<f64>,
+    fps: Option<u32>,
+    recursive: Option<bool>,
+}
+
+/// Start a scan against a folder. For E2 this is always
+/// `render --ipc --estimate-only` — real renders are Epic 4.
 ///
 /// Events are emitted to the frontend on `marquee://sidecar-event`.
 #[tauri::command]
-async fn start_scan(app: tauri::AppHandle, folder: String) -> Result<(), String> {
+async fn start_scan(
+    app: tauri::AppHandle,
+    folder: String,
+    settings: Option<ScanSettings>,
+) -> Result<(), String> {
     // Throwaway output path. estimate-only exits before any encode is
     // started, so this file is never written.
     let throwaway_out = std::env::temp_dir()
@@ -16,7 +34,7 @@ async fn start_scan(app: tauri::AppHandle, folder: String) -> Result<(), String>
         .to_string_lossy()
         .to_string();
 
-    let args = vec![
+    let mut args = vec![
         "render".into(),
         "--ipc".into(),
         "--dir".into(),
@@ -27,6 +45,28 @@ async fn start_scan(app: tauri::AppHandle, folder: String) -> Result<(), String>
         "1".into(),
         "--estimate-only".into(),
     ];
+
+    if let Some(s) = settings {
+        if let Some(res) = s.resolution {
+            args.push("--resolution".into());
+            args.push(res);
+        }
+        if let Some(sd) = s.slide_duration {
+            args.push("--slide-duration".into());
+            args.push(sd.to_string());
+        }
+        if let Some(fd) = s.fade_duration {
+            args.push("--fade-duration".into());
+            args.push(fd.to_string());
+        }
+        if let Some(fps) = s.fps {
+            args.push("--fps".into());
+            args.push(fps.to_string());
+        }
+        if s.recursive.unwrap_or(false) {
+            args.push("--recursive".into());
+        }
+    }
 
     spawn_sidecar(&app, args)
 }

@@ -11,6 +11,11 @@ import {
 } from "@/components/ui/card";
 import { useSidecar } from "@/hooks/useSidecar";
 import type { SidecarEvent } from "@/lib/sidecar-events";
+import {
+  DEFAULT_SETTINGS,
+  useSettings,
+  type RenderSettings,
+} from "@/lib/settings";
 
 function formatDuration(seconds: number): string {
   if (seconds < 60) return `${seconds.toFixed(1)}s`;
@@ -88,10 +93,47 @@ function Stat({ label, value }: { label: string; value: string }) {
   );
 }
 
+function Field({
+  label,
+  children,
+}: {
+  label: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <label className="flex flex-col gap-1.5 text-sm">
+      <span className="text-xs uppercase tracking-wide text-muted-foreground">
+        {label}
+      </span>
+      {children}
+    </label>
+  );
+}
+
+function settingsSummary(s: RenderSettings): string {
+  const parts = [
+    s.resolution,
+    `${s.slideDuration}s slides`,
+    `${s.fadeDuration}s fades`,
+    `${s.fps}fps`,
+  ];
+  if (s.recursive) parts.push("recursive");
+  return parts.join(" · ");
+}
+
 function App() {
   const { state, start, reset } = useSidecar();
+  const [settings, setSettings] = useSettings();
   const [folder, setFolder] = useState<string | null>(null);
   const [dragging, setDragging] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+
+  function update<K extends keyof RenderSettings>(
+    key: K,
+    value: RenderSettings[K],
+  ) {
+    setSettings((prev) => ({ ...prev, [key]: value }));
+  }
 
   useEffect(() => {
     let unlisten: (() => void) | null = null;
@@ -127,7 +169,26 @@ function App() {
   }
 
   async function runScan() {
-    if (folder) await start(folder);
+    if (!folder) return;
+    // Only send fields that differ from default — keeps the CLI args
+    // small and lets us evolve defaults without bumping persisted state.
+    const overrides: Record<string, unknown> = {};
+    if (settings.resolution !== DEFAULT_SETTINGS.resolution) {
+      overrides.resolution = settings.resolution;
+    }
+    if (settings.slideDuration !== DEFAULT_SETTINGS.slideDuration) {
+      overrides.slideDuration = settings.slideDuration;
+    }
+    if (settings.fadeDuration !== DEFAULT_SETTINGS.fadeDuration) {
+      overrides.fadeDuration = settings.fadeDuration;
+    }
+    if (settings.fps !== DEFAULT_SETTINGS.fps) {
+      overrides.fps = settings.fps;
+    }
+    if (settings.recursive !== DEFAULT_SETTINGS.recursive) {
+      overrides.recursive = settings.recursive;
+    }
+    await start(folder, Object.keys(overrides).length ? overrides : undefined);
   }
 
   const { discovery, estimate, progress, phase, error, running } = state;
@@ -180,6 +241,109 @@ function App() {
               </p>
             )}
           </CardContent>
+        </Card>
+
+        <Card>
+          <button
+            type="button"
+            onClick={() => setSettingsOpen((v) => !v)}
+            className="w-full text-left p-6 flex items-center justify-between hover:bg-muted/30 transition-colors rounded-xl"
+            aria-expanded={settingsOpen}
+            aria-controls="settings-body"
+          >
+            <div className="space-y-1">
+              <div className="font-semibold leading-none tracking-tight">
+                Settings
+              </div>
+              <div className="text-sm text-muted-foreground">
+                {settingsSummary(settings)}
+              </div>
+            </div>
+            <span className="text-muted-foreground text-sm">
+              {settingsOpen ? "Hide" : "Edit"}
+            </span>
+          </button>
+          {settingsOpen && (
+            <CardContent
+              id="settings-body"
+              className="border-t pt-6 grid grid-cols-1 md:grid-cols-2 gap-5"
+            >
+              <Field label="Resolution">
+                <select
+                  value={settings.resolution}
+                  onChange={(e) =>
+                    update("resolution", e.target.value as RenderSettings["resolution"])
+                  }
+                  className="w-full rounded-md border bg-background px-3 py-2 text-sm"
+                >
+                  <option value="1080p">1080p (1920×1080)</option>
+                  <option value="4k">4K (3840×2160)</option>
+                </select>
+              </Field>
+              <Field label="FPS">
+                <input
+                  type="number"
+                  min={15}
+                  max={60}
+                  step={1}
+                  value={settings.fps}
+                  onChange={(e) =>
+                    update("fps", Number(e.target.value) || DEFAULT_SETTINGS.fps)
+                  }
+                  className="w-full rounded-md border bg-background px-3 py-2 text-sm tabular-nums"
+                />
+              </Field>
+              <Field label="Slide duration (s)">
+                <input
+                  type="number"
+                  min={0.5}
+                  max={30}
+                  step={0.5}
+                  value={settings.slideDuration}
+                  onChange={(e) =>
+                    update(
+                      "slideDuration",
+                      Number(e.target.value) || DEFAULT_SETTINGS.slideDuration,
+                    )
+                  }
+                  className="w-full rounded-md border bg-background px-3 py-2 text-sm tabular-nums"
+                />
+              </Field>
+              <Field label="Fade duration (s)">
+                <input
+                  type="number"
+                  min={0}
+                  max={5}
+                  step={0.1}
+                  value={settings.fadeDuration}
+                  onChange={(e) =>
+                    update(
+                      "fadeDuration",
+                      Number(e.target.value) || DEFAULT_SETTINGS.fadeDuration,
+                    )
+                  }
+                  className="w-full rounded-md border bg-background px-3 py-2 text-sm tabular-nums"
+                />
+              </Field>
+              <label className="flex items-center gap-3 md:col-span-2 text-sm cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={settings.recursive}
+                  onChange={(e) => update("recursive", e.target.checked)}
+                  className="h-4 w-4"
+                />
+                <span>Scan subfolders (recursive)</span>
+              </label>
+              <div className="md:col-span-2 flex justify-end">
+                <Button
+                  variant="outline"
+                  onClick={() => setSettings(DEFAULT_SETTINGS)}
+                >
+                  Reset to defaults
+                </Button>
+              </div>
+            </CardContent>
+          )}
         </Card>
 
         {running && !hasResults && (
