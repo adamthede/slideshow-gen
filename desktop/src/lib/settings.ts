@@ -15,6 +15,10 @@ export interface RenderSettings {
   fadeDuration: number;
   fps: number;
   recursive: boolean;
+  /** Absolute path to a background audio file, or null for no audio. */
+  audioTrack: string | null;
+  /** 0.0 silent → 1.0 source level. Ignored when audioTrack is null. */
+  audioVolume: number;
 }
 
 export const DEFAULT_SETTINGS: RenderSettings = {
@@ -23,6 +27,8 @@ export const DEFAULT_SETTINGS: RenderSettings = {
   fadeDuration: 0.5,
   fps: 30,
   recursive: false,
+  audioTrack: null,
+  audioVolume: 1.0,
 };
 
 const STORAGE_KEY = "marquee.renderSettings.v1";

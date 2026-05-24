@@ -118,13 +118,17 @@ function settingsSummary(s: RenderSettings): string {
     `${s.fps}fps`,
   ];
   if (s.recursive) parts.push("recursive");
+  if (s.audioTrack) {
+    const name = s.audioTrack.split("/").pop() ?? "audio";
+    parts.push(`audio: ${name}`);
+  }
   return parts.join(" · ");
 }
 
 function App() {
   const { state, start, reset } = useSidecar();
   const [settings, setSettings] = useSettings();
-  const [folder, setFolder] = useState<string | null>(null);
+  const [folders, setFolders] = useState<string[]>([]);
   const [dragging, setDragging] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
 
@@ -133,6 +137,27 @@ function App() {
     value: RenderSettings[K],
   ) {
     setSettings((prev) => ({ ...prev, [key]: value }));
+  }
+
+  function addFolders(paths: string[]) {
+    if (paths.length === 0) return;
+    setFolders((prev) => {
+      const seen = new Set(prev);
+      const next = [...prev];
+      for (const p of paths) {
+        if (!seen.has(p)) {
+          next.push(p);
+          seen.add(p);
+        }
+      }
+      return next;
+    });
+    reset();
+  }
+
+  function removeFolder(path: string) {
+    setFolders((prev) => prev.filter((p) => p !== path));
+    reset();
   }
 
   useEffect(() => {
@@ -145,11 +170,7 @@ function App() {
           setDragging(false);
         } else if (event.payload.type === "drop") {
           setDragging(false);
-          const first = event.payload.paths[0];
-          if (first) {
-            setFolder(first);
-            reset();
-          }
+          addFolders(event.payload.paths);
         }
       })
       .then((fn) => {
@@ -158,18 +179,35 @@ function App() {
     return () => {
       unlisten?.();
     };
-  }, [reset]);
+    // addFolders/reset are stable enough — re-running this effect on
+    // every render would re-register the webview listener.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   async function pickFolder() {
-    const selected = await open({ directory: true, multiple: false });
+    const selected = await open({ directory: true, multiple: true });
+    if (Array.isArray(selected)) {
+      addFolders(selected);
+    } else if (typeof selected === "string") {
+      addFolders([selected]);
+    }
+  }
+
+  async function pickAudio() {
+    const selected = await open({
+      directory: false,
+      multiple: false,
+      filters: [
+        { name: "Audio", extensions: ["mp3", "m4a", "wav", "aac", "flac", "ogg"] },
+      ],
+    });
     if (typeof selected === "string") {
-      setFolder(selected);
-      reset();
+      update("audioTrack", selected);
     }
   }
 
   async function runScan() {
-    if (!folder) return;
+    if (folders.length === 0) return;
     // Only send fields that differ from default — keeps the CLI args
     // small and lets us evolve defaults without bumping persisted state.
     const overrides: Record<string, unknown> = {};
@@ -188,7 +226,16 @@ function App() {
     if (settings.recursive !== DEFAULT_SETTINGS.recursive) {
       overrides.recursive = settings.recursive;
     }
-    await start(folder, Object.keys(overrides).length ? overrides : undefined);
+    if (settings.audioTrack) {
+      overrides.audioTrack = settings.audioTrack;
+      if (settings.audioVolume !== DEFAULT_SETTINGS.audioVolume) {
+        overrides.audioVolume = settings.audioVolume;
+      }
+    }
+    await start(
+      folders,
+      Object.keys(overrides).length ? overrides : undefined,
+    );
   }
 
   const { discovery, estimate, progress, phase, error, running } = state;
@@ -206,7 +253,7 @@ function App() {
         <header className="space-y-2">
           <h1 className="text-3xl font-bold tracking-tight">Marquee</h1>
           <p className="text-sm text-muted-foreground">
-            Pick a folder of photos to see a pre-render summary.
+            Pick folders of photos to see a pre-render summary.
           </p>
         </header>
 
@@ -218,27 +265,46 @@ function App() {
           }
         >
           <CardHeader>
-            <CardTitle>Folder</CardTitle>
+            <CardTitle>Folders</CardTitle>
             <CardDescription>
-              Drop a folder anywhere on the window, or click below to choose one.
+              Drop folders anywhere on the window, or use the button to add them.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
             <div className="flex items-center gap-3">
               <Button onClick={pickFolder} variant="outline">
-                Choose folder
+                {folders.length === 0 ? "Choose folder" : "Add folder"}
               </Button>
-              <Button onClick={runScan} disabled={!folder || running}>
+              <Button onClick={runScan} disabled={folders.length === 0 || running}>
                 {running ? "Scanning…" : hasResults ? "Re-scan" : "Scan"}
               </Button>
+              {folders.length > 1 && (
+                <span className="text-xs text-muted-foreground">
+                  {folders.length} folders
+                </span>
+              )}
             </div>
-            {folder && (
-              <p
-                className="text-xs text-muted-foreground font-mono truncate"
-                title={folder}
-              >
-                {truncateMiddle(folder)}
-              </p>
+            {folders.length > 0 && (
+              <ul className="space-y-1">
+                {folders.map((p) => (
+                  <li
+                    key={p}
+                    className="flex items-center justify-between gap-3 text-xs font-mono bg-muted/40 rounded-md px-3 py-2"
+                  >
+                    <span className="truncate" title={p}>
+                      {truncateMiddle(p)}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => removeFolder(p)}
+                      className="shrink-0 text-muted-foreground hover:text-foreground transition-colors"
+                      aria-label={`Remove ${p}`}
+                    >
+                      ×
+                    </button>
+                  </li>
+                ))}
+              </ul>
             )}
           </CardContent>
         </Card>
@@ -334,6 +400,49 @@ function App() {
                 />
                 <span>Scan subfolders (recursive)</span>
               </label>
+
+              <div className="md:col-span-2 border-t pt-5 space-y-3">
+                <div className="text-xs uppercase tracking-wide text-muted-foreground">
+                  Background audio
+                </div>
+                <div className="flex items-center gap-3">
+                  <Button variant="outline" onClick={pickAudio}>
+                    {settings.audioTrack ? "Change track" : "Choose audio file"}
+                  </Button>
+                  {settings.audioTrack && (
+                    <Button
+                      variant="outline"
+                      onClick={() => update("audioTrack", null)}
+                    >
+                      Remove
+                    </Button>
+                  )}
+                  {settings.audioTrack && (
+                    <span
+                      className="text-xs font-mono text-muted-foreground truncate"
+                      title={settings.audioTrack}
+                    >
+                      {settings.audioTrack.split("/").pop()}
+                    </span>
+                  )}
+                </div>
+                {settings.audioTrack && (
+                  <Field label={`Volume (${settings.audioVolume.toFixed(2)}×)`}>
+                    <input
+                      type="range"
+                      min={0}
+                      max={2}
+                      step={0.05}
+                      value={settings.audioVolume}
+                      onChange={(e) =>
+                        update("audioVolume", Number(e.target.value))
+                      }
+                      className="w-full"
+                    />
+                  </Field>
+                )}
+              </div>
+
               <div className="md:col-span-2 flex justify-end">
                 <Button
                   variant="outline"

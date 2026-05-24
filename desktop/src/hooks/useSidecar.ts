@@ -76,10 +76,10 @@ export function useSidecar() {
   }, []);
 
   const start = useCallback(
-    async (folder: string, settings?: Record<string, unknown>) => {
+    async (folders: string[], settings?: Record<string, unknown>) => {
       setState({ ...initialState, running: true });
       try {
-        await invoke("start_scan", { folder, settings });
+        await invoke("start_scan", { folders, settings });
       } catch (err) {
         setState((prev) => ({
           ...prev,

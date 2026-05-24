@@ -15,6 +15,11 @@ struct ScanSettings {
     fade_duration: Option<f64>,
     fps: Option<u32>,
     recursive: Option<bool>,
+    /// Absolute path to a background audio file (mp3/m4a/wav/...).
+    audio_track: Option<String>,
+    /// Volume 0.0–N for the background track. Only applied when
+    /// `audio_track` is also set.
+    audio_volume: Option<f64>,
 }
 
 /// Start a scan against a folder. For E2 this is always
@@ -24,9 +29,13 @@ struct ScanSettings {
 #[tauri::command]
 async fn start_scan(
     app: tauri::AppHandle,
-    folder: String,
+    folders: Vec<String>,
     settings: Option<ScanSettings>,
 ) -> Result<(), String> {
+    if folders.is_empty() {
+        return Err("No folders selected.".into());
+    }
+
     // Throwaway output path. estimate-only exits before any encode is
     // started, so this file is never written.
     let throwaway_out = std::env::temp_dir()
@@ -34,17 +43,16 @@ async fn start_scan(
         .to_string_lossy()
         .to_string();
 
-    let mut args = vec![
-        "render".into(),
-        "--ipc".into(),
-        "--dir".into(),
-        folder,
-        "-o".into(),
-        throwaway_out,
-        "--workers".into(),
-        "1".into(),
-        "--estimate-only".into(),
-    ];
+    let mut args: Vec<String> = vec!["render".into(), "--ipc".into()];
+    for folder in &folders {
+        args.push("--dir".into());
+        args.push(folder.clone());
+    }
+    args.push("-o".into());
+    args.push(throwaway_out);
+    args.push("--workers".into());
+    args.push("1".into());
+    args.push("--estimate-only".into());
 
     if let Some(s) = settings {
         if let Some(res) = s.resolution {
@@ -65,6 +73,16 @@ async fn start_scan(
         }
         if s.recursive.unwrap_or(false) {
             args.push("--recursive".into());
+        }
+        if let Some(audio) = s.audio_track {
+            if !audio.is_empty() {
+                args.push("--audio-track".into());
+                args.push(audio);
+                if let Some(vol) = s.audio_volume {
+                    args.push("--audio-volume".into());
+                    args.push(vol.to_string());
+                }
+            }
         }
     }
 
