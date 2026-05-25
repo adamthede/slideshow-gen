@@ -220,6 +220,12 @@ function App() {
         } else {
           unlisten = fn;
         }
+      })
+      .catch((err) => {
+        // Registration failure (e.g. webview API not ready) shouldn't be
+        // a silent unhandled rejection. Log it; drag-drop will be unavailable
+        // but the picker button still works.
+        console.error("[marquee] failed to register drag-drop listener:", err);
       });
     return () => {
       cancelled = true;
@@ -435,12 +441,16 @@ function App() {
                   max={5}
                   step={0.1}
                   value={settings.fadeDuration}
-                  onChange={(e) =>
+                  onChange={(e) => {
+                    // Explicit isFinite check so a user-typed `0` (valid:
+                    // no crossfade) survives instead of being treated as
+                    // falsy and reset to DEFAULT.
+                    const parsed = Number(e.target.value);
                     update(
                       "fadeDuration",
-                      Number(e.target.value) || DEFAULT_SETTINGS.fadeDuration,
-                    )
-                  }
+                      Number.isFinite(parsed) ? parsed : DEFAULT_SETTINGS.fadeDuration,
+                    );
+                  }}
                   className="w-full rounded-md border bg-background px-3 py-2 text-sm tabular-nums"
                 />
               </Field>
@@ -601,7 +611,7 @@ function App() {
             <CardHeader>
               <CardTitle>Summary</CardTitle>
               <CardDescription>
-                What we found in the folder.
+                What we found across the selected folder{folders.length === 1 ? "" : "s"}.
               </CardDescription>
             </CardHeader>
             <CardContent className="grid grid-cols-2 md:grid-cols-4 gap-6">

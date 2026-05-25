@@ -91,14 +91,17 @@ class RenderPipeline:
         images = [i for i in items if i.media_type == "image"]
         videos = [i for i in items if i.media_type == "video"]
 
-        # Compute date range
+        # Compute date range. Emit date-only ISO strings (YYYY-MM-DD) to
+        # match the protocol field name (`date_range`, not `datetime_range`)
+        # and the doc — EXIF parsed_dates carry time components that we
+        # intentionally drop here.
         date_range = None
         if items:
             parsed_dates = [i.parsed_date for i in items if i.parsed_date]
             if parsed_dates:
                 earliest = min(parsed_dates)
                 latest = max(parsed_dates)
-                date_range = (earliest.isoformat(), latest.isoformat())
+                date_range = (earliest.date().isoformat(), latest.date().isoformat())
 
         # Compute GPS coverage % — explicit None check; (0.0, 0.0) is a
         # valid coordinate (Equator + Prime Meridian intersection).
