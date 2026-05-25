@@ -7,8 +7,10 @@
     "core:default",
     "core:event:default",
     "opener:default",
+    "opener:allow-reveal-item-in-dir",
     "dialog:default",
     "dialog:allow-open",
+    "dialog:allow-save",
     {
       "identifier": "shell:allow-execute",
       "allow": [

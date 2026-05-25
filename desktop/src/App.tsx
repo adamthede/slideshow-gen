@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { open } from "@tauri-apps/plugin-dialog";
+import { open, save } from "@tauri-apps/plugin-dialog";
+import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { Button } from "@/components/ui/button";
 import {
@@ -162,12 +163,23 @@ function settingsSummary(s: RenderSettings): string {
   return parts.join(" · ");
 }
 
+function defaultOutputName(): string {
+  const today = new Date().toISOString().slice(0, 10);
+  return `slideshow-${today}.mp4`;
+}
+
 function App() {
-  const { state, start, reset } = useSidecar();
+  const { state, start, startRender, reset } = useSidecar();
   const [settings, setSettings] = useSettings();
   const [folders, setFolders] = useState<string[]>([]);
   const [dragging, setDragging] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  // Output destination is transient session state, not persisted: a stale
+  // absolute path surviving across launches would be a footgun.
+  const [outputPath, setOutputPath] = useState<string | null>(null);
+  // Tracks whether the in-flight (or last) run was a real render vs a
+  // pre-render scan, so the UI shows the right progress/result copy.
+  const [isRendering, setIsRendering] = useState(false);
 
   function update<K extends keyof RenderSettings>(
     key: K,
@@ -262,10 +274,10 @@ function App() {
     }
   }
 
-  async function runScan() {
-    if (folders.length === 0) return;
-    // Only send fields that differ from default — keeps the CLI args
-    // small and lets us evolve defaults without bumping persisted state.
+  // Only send fields that differ from default — keeps the CLI args small
+  // and lets us evolve defaults without bumping persisted state. Shared by
+  // the scan (estimate-only) and render paths.
+  function buildOverrides(): Record<string, unknown> | undefined {
     const overrides: Record<string, unknown> = {};
     if (settings.resolution !== DEFAULT_SETTINGS.resolution) {
       overrides.resolution = settings.resolution;
@@ -293,15 +305,42 @@ function App() {
     if (settings.noOverlays) overrides.noOverlays = true;
     if (settings.noDate) overrides.noDate = true;
     if (settings.noLocation) overrides.noLocation = true;
-
-    await start(
-      folders,
-      Object.keys(overrides).length ? overrides : undefined,
-    );
+    return Object.keys(overrides).length ? overrides : undefined;
   }
 
-  const { discovery, estimate, progress, phase, error, running } = state;
+  async function runScan() {
+    if (folders.length === 0) return;
+    setIsRendering(false);
+    await start(folders, buildOverrides());
+  }
+
+  async function pickOutput(): Promise<string | null> {
+    const selected = await save({
+      title: "Save slideshow as",
+      defaultPath: outputPath ?? defaultOutputName(),
+      filters: [{ name: "Video", extensions: ["mp4"] }],
+    });
+    if (typeof selected === "string") {
+      setOutputPath(selected);
+      return selected;
+    }
+    return null;
+  }
+
+  async function runRender() {
+    if (folders.length === 0 || state.running) return;
+    // Prompt for a destination if none chosen yet, so we never silently
+    // write to a temp path for a real render.
+    const destination = outputPath ?? (await pickOutput());
+    if (!destination) return;
+    setIsRendering(true);
+    await startRender(folders, destination, buildOverrides());
+  }
+
+  const { discovery, estimate, complete, progress, phase, error, running } =
+    state;
   const hasResults = discovery !== null || estimate !== null;
+  const rendering = running && isRendering;
 
   function truncateMiddle(path: string, max = 80): string {
     if (path.length <= max) return path;
@@ -335,16 +374,52 @@ function App() {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-3 flex-wrap">
               <Button onClick={pickFolder} variant="outline" disabled={running}>
                 {folders.length === 0 ? "Choose folder" : "Add folder"}
               </Button>
-              <Button onClick={runScan} disabled={folders.length === 0 || running}>
-                {running ? "Scanning…" : hasResults ? "Re-scan" : "Scan"}
+              <Button
+                onClick={runScan}
+                variant="outline"
+                disabled={folders.length === 0 || running}
+              >
+                {running && !isRendering
+                  ? "Scanning…"
+                  : hasResults
+                    ? "Re-scan"
+                    : "Scan"}
+              </Button>
+              <Button
+                onClick={runRender}
+                disabled={folders.length === 0 || running}
+              >
+                {rendering ? "Rendering…" : "Render"}
               </Button>
               {folders.length > 1 && (
                 <span className="text-xs text-muted-foreground">
                   {folders.length} folders
+                </span>
+              )}
+            </div>
+            <div className="flex items-center gap-3 flex-wrap text-xs">
+              <Button
+                onClick={pickOutput}
+                variant="outline"
+                size="sm"
+                disabled={running}
+              >
+                {outputPath ? "Change destination" : "Choose destination…"}
+              </Button>
+              {outputPath ? (
+                <span
+                  className="font-mono text-muted-foreground truncate"
+                  title={outputPath}
+                >
+                  {truncateMiddle(outputPath, 64)}
+                </span>
+              ) : (
+                <span className="text-muted-foreground">
+                  Render will ask where to save.
                 </span>
               )}
             </div>
@@ -570,7 +645,7 @@ function App() {
           )}
         </Card>
 
-        {running && !hasResults && (
+        {running && !isRendering && !hasResults && (
           <Card>
             <CardHeader>
               <CardTitle>Scanning…</CardTitle>
@@ -600,6 +675,77 @@ function App() {
                 </div>
               </CardContent>
             )}
+          </Card>
+        )}
+
+        {rendering && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Rendering…</CardTitle>
+              <CardDescription>
+                {phase ? `Phase: ${phase}` : "Starting render…"}
+                {progress && progress.total > 0
+                  ? ` · ${progress.done.toLocaleString()} / ${progress.total.toLocaleString()}`
+                  : ""}
+              </CardDescription>
+            </CardHeader>
+            {progress && progress.total > 0 && (
+              <CardContent>
+                <div
+                  className="h-2 w-full overflow-hidden rounded-full bg-muted"
+                  role="progressbar"
+                  aria-valuemin={0}
+                  aria-valuemax={progress.total}
+                  aria-valuenow={progress.done}
+                >
+                  <div
+                    className="h-full bg-primary transition-[width] duration-150 ease-out"
+                    style={{
+                      width: `${Math.min(100, (progress.done / progress.total) * 100)}%`,
+                    }}
+                  />
+                </div>
+              </CardContent>
+            )}
+          </Card>
+        )}
+
+        {complete && (
+          <Card className="border-primary">
+            <CardHeader>
+              <CardTitle>Render complete</CardTitle>
+              <CardDescription>
+                Finished in {formatDuration(complete.elapsed_s)}.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              {complete.outputs.map((o) => (
+                <div
+                  key={o.path}
+                  className="flex items-center justify-between gap-3 text-xs bg-muted/40 rounded-md px-3 py-2"
+                >
+                  <span className="font-mono truncate" title={o.path}>
+                    {truncateMiddle(o.path)}
+                  </span>
+                  <div className="flex items-center gap-3 shrink-0">
+                    <span className="font-mono text-muted-foreground">
+                      {formatSize(o.size_bytes)}
+                    </span>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() =>
+                        revealItemInDir(o.path).catch((err) =>
+                          console.error("[marquee] reveal failed:", err),
+                        )
+                      }
+                    >
+                      Reveal in Finder
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </CardContent>
           </Card>
         )}
 

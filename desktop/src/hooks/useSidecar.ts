@@ -3,6 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import {
   SIDECAR_EVENT_CHANNEL,
+  type CompleteEvent,
   type DiscoveryCompleteEvent,
   type EstimateEvent,
   type SidecarEvent,
@@ -22,6 +23,9 @@ export interface SidecarState {
   discovery: DiscoveryCompleteEvent | null;
   /** Latest estimate event, or null. */
   estimate: EstimateEvent | null;
+  /** The `complete` event from a finished render, or null. Carries the
+   *  written output file(s). Only emitted by real renders, not scans. */
+  complete: CompleteEvent | null;
   /** Latest error message, or null. */
   error: string | null;
   /** True after `complete` event OR after process exit. */
@@ -39,6 +43,7 @@ const initialState: SidecarState = {
   progress: null,
   discovery: null,
   estimate: null,
+  complete: null,
   error: null,
   done: false,
   running: false,
@@ -92,9 +97,30 @@ export function useSidecar() {
     [],
   );
 
+  const startRender = useCallback(
+    async (
+      folders: string[],
+      output: string,
+      settings?: Record<string, unknown>,
+    ) => {
+      setState({ ...initialState, running: true });
+      try {
+        await invoke("start_render", { folders, output, settings });
+      } catch (err) {
+        setState((prev) => ({
+          ...prev,
+          running: false,
+          done: true,
+          error: typeof err === "string" ? err : String(err),
+        }));
+      }
+    },
+    [],
+  );
+
   const reset = useCallback(() => setState(initialState), []);
 
-  return { state, start, reset };
+  return { state, start, startRender, reset };
 }
 
 function reduce(prev: SidecarState, msg: SidecarMessage): SidecarState {
@@ -129,6 +155,7 @@ function reduce(prev: SidecarState, msg: SidecarMessage): SidecarState {
           next.error = event.message;
           break;
         case "complete":
+          next.complete = event;
           next.done = true;
           break;
       }
