@@ -57,6 +57,7 @@ A long-running phase begins. Phases are named:
 | `phase` | Meaning |
 |---|---|
 | `discovery` | Scanning directories for media |
+| `deduplication` | Hashing items to detect duplicates (sits between `discovery` and `discovery_complete`) |
 | `images` | Phase 1 Ken Burns clip rendering (parallel) |
 | `static-batching` | Static (no Ken Burns) batch rendering |
 | `batching` | Phase 2 batch reduction with crossfades |

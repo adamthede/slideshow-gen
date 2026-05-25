@@ -113,8 +113,18 @@ class RenderPipeline:
         # Detect duplicates. We report the count but do not currently drop
         # them — keeping the historical CLI behavior. Hence "detected", not
         # "removed".
+        #
+        # detect_duplicates reads the first 64KB of every file, which on a
+        # 4k-item library can be several seconds of I/O after discovery
+        # progress hit 100%. Wrap it in phase_started/phase_complete so the
+        # UI shows "deduplication" instead of looking stalled.
+        self.reporter.phase_started("deduplication", total=len(items))
         duplicates = detect_duplicates(items)
         dupes_detected = len(duplicates)
+        self.reporter.phase_complete(
+            "deduplication",
+            message=f"{dupes_detected} duplicates" if dupes_detected else "none",
+        )
 
         self.reporter.discovery_complete(
             len(images),

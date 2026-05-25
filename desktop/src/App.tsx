@@ -178,6 +178,10 @@ function App() {
 
   function addFolders(paths: string[]) {
     if (paths.length === 0) return;
+    // No-op while a scan is running. Both the drop handler and the
+    // picker call into here; without this guard the in-flight scan's
+    // results would be reset() out from under the user.
+    if (state.running) return;
     setFolders((prev) => {
       const seen = new Set(prev);
       const next = [...prev];
@@ -332,7 +336,7 @@ function App() {
           </CardHeader>
           <CardContent className="space-y-3">
             <div className="flex items-center gap-3">
-              <Button onClick={pickFolder} variant="outline">
+              <Button onClick={pickFolder} variant="outline" disabled={running}>
                 {folders.length === 0 ? "Choose folder" : "Add folder"}
               </Button>
               <Button onClick={runScan} disabled={folders.length === 0 || running}>

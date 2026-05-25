@@ -29,8 +29,9 @@ struct ScanSettings {
     no_location: Option<bool>,
 }
 
-/// Start a scan against a folder. For E2 this is always
-/// `render --ipc --estimate-only` — real renders are Epic 4.
+/// Start a scan against one or more folders. For E2 this is always
+/// `render --ipc --estimate-only` — real renders are Epic 4. Each folder
+/// is forwarded as a separate `--dir` argument to the sidecar CLI.
 ///
 /// Events are emitted to the frontend on `marquee://sidecar-event`.
 #[tauri::command]

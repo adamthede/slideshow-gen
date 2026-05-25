@@ -55,17 +55,20 @@ def test_ipc_estimate_only_lifecycle(tmp_path):
 
     assert rc == 0
     types = [e["type"] for e in events]
-    # Discovery emits zero or more `progress` ticks between phase_started
-    # and discovery_complete (PROGRESS_STRIDE=25 in discovery.py, so a
-    # 3-image fixture only fires the final one).
-    non_progress = [t for t in types if t != "progress"]
-    assert non_progress == [
-        "started",
-        "phase_started",
-        "discovery_complete",
-        "estimate",
-        "info",
-    ]
+    # Lifecycle ordering, ignoring throttled `progress` ticks and the
+    # deduplication phase_started/phase_complete pair that sits between
+    # discovery and discovery_complete.
+    def idx(t: str) -> int:
+        return next(i for i, e in enumerate(events) if e["type"] == t)
+    assert types[0] == "started"
+    # First phase_started is always discovery.
+    first_phase = next(e for e in events if e["type"] == "phase_started")
+    assert first_phase["phase"] == "discovery"
+    # Deduplication phase fires between discovery and discovery_complete.
+    dedup_started = [e for e in events if e["type"] == "phase_started" and e.get("phase") == "deduplication"]
+    dedup_complete = [e for e in events if e["type"] == "phase_complete" and e.get("phase") == "deduplication"]
+    assert len(dedup_started) == 1 and len(dedup_complete) == 1
+    assert idx("phase_started") < idx("discovery_complete") < idx("estimate") < idx("info")
     # Any discovery progress events must sit between phase_started and
     # discovery_complete, reference the discovery phase, and have monotonic
     # `done` values.
@@ -92,10 +95,21 @@ def test_ipc_estimate_only_lifecycle(tmp_path):
         assert isinstance(e["t"], (int, float))
         assert isinstance(e["type"], str)
 
-    # discovery_complete shape
+    # discovery_complete shape — counts plus the metadata fields documented
+    # in docs/sidecar-protocol.md.
     dc = next(e for e in events if e["type"] == "discovery_complete")
     assert dc["images"] == 3
     assert dc["videos"] == 0
+    # date_range present, date-only (no time component) per protocol doc.
+    # Fixture filenames are "2026-05-23 12-0{i}-00 - test.jpg" → all same date.
+    assert "date_range" in dc
+    assert dc["date_range"] == {"earliest": "2026-05-23", "latest": "2026-05-23"}
+    # gps_coverage_percent always present after items found; PIL-generated
+    # fixtures have no EXIF GPS, so 0.0 is correct.
+    assert dc["gps_coverage_percent"] == 0.0
+    # duplicates_detected always present after items found; distinct synthetic
+    # images → 0.
+    assert dc["duplicates_detected"] == 0
 
     # estimate shape
     est = next(e for e in events if e["type"] == "estimate")
