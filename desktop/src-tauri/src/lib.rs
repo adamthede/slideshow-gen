@@ -45,9 +45,11 @@ async fn start_scan(
     }
 
     // Throwaway output path. estimate-only exits before any encode is
-    // started, so this file is never written.
+    // started, so this file is never written today. PID is included
+    // anyway so Epic 4 (real renders) inherits a collision-safe path
+    // when this code starts actually writing.
     let throwaway_out = std::env::temp_dir()
-        .join("marquee-estimate-only.mp4")
+        .join(format!("marquee-estimate-{}.mp4", std::process::id()))
         .to_string_lossy()
         .to_string();
 
