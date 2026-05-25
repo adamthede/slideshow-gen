@@ -302,7 +302,9 @@ function App() {
   function truncateMiddle(path: string, max = 80): string {
     if (path.length <= max) return path;
     const half = Math.floor((max - 1) / 2);
-    return `${path.slice(0, half)}…${path.slice(-half)}`;
+    // path.slice(-0) returns the whole string in JS (because -0 === 0).
+    // Use path.length - half so half=0 correctly yields an empty tail.
+    return `${path.slice(0, half)}…${path.slice(path.length - half)}`;
   }
 
   return (
