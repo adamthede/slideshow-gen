@@ -8,6 +8,7 @@ export const PROTOCOL_VERSION = 1;
 
 export type Phase =
   | "discovery"
+  | "deduplication"
   | "images"
   | "static-batching"
   | "batching"
@@ -44,6 +45,9 @@ export interface DiscoveryCompleteEvent extends BaseEvent {
   type: "discovery_complete";
   images: number;
   videos: number;
+  date_range?: { earliest: string; latest: string };
+  gps_coverage_percent?: number;
+  duplicates_detected?: number;
 }
 
 export interface EstimateEvent extends BaseEvent {

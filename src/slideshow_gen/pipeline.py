@@ -15,7 +15,7 @@ from pathlib import Path
 import click
 
 from .config import RenderConfig
-from .discovery import MediaItem, scan_directories, sort_items
+from .discovery import MediaItem, detect_duplicates, scan_directories, sort_items
 from .estimate import estimate_output
 from .events import ConsoleReporter, Reporter
 from .ffmpeg import (
@@ -67,8 +67,21 @@ class RenderPipeline:
         # per-file). Defer the hard FFmpeg preflight until we know we're about
         # to render — that way `--estimate-only` works even on machines where
         # ffmpeg isn't on PATH (e.g. inside a macOS .app's subprocess env).
+        # Emit `phase_started` without a total — the candidate count is only
+        # known after the first walk inside scan_directories. Progress ticks
+        # carry both done and total so the UI can render a bar without ever
+        # having seen the phase_started total field.
         self.reporter.phase_started("discovery")
-        items = scan_directories(self.dirs, verbose=self.config.verbose, recursive=self.recursive)
+
+        def _on_discovery_progress(done: int, total: int, name: str) -> None:
+            self.reporter.progress("discovery", done, total, message=name)
+
+        items = scan_directories(
+            self.dirs,
+            verbose=self.config.verbose,
+            recursive=self.recursive,
+            on_progress=_on_discovery_progress,
+        )
         items = sort_items(items, random=self.config.random_order)
 
         if not items:
@@ -77,7 +90,49 @@ class RenderPipeline:
 
         images = [i for i in items if i.media_type == "image"]
         videos = [i for i in items if i.media_type == "video"]
-        self.reporter.discovery_complete(len(images), len(videos))
+
+        # Compute date range. Emit date-only ISO strings (YYYY-MM-DD) to
+        # match the protocol field name (`date_range`, not `datetime_range`)
+        # and the doc — EXIF parsed_dates carry time components that we
+        # intentionally drop here.
+        date_range = None
+        if items:
+            parsed_dates = [i.parsed_date for i in items if i.parsed_date]
+            if parsed_dates:
+                earliest = min(parsed_dates)
+                latest = max(parsed_dates)
+                date_range = (earliest.date().isoformat(), latest.date().isoformat())
+
+        # Compute GPS coverage % — explicit None check; (0.0, 0.0) is a
+        # valid coordinate (Equator + Prime Meridian intersection).
+        gps_items = sum(
+            1 for i in items if i.gps_lat is not None and i.gps_lon is not None
+        )
+        gps_coverage = (gps_items / len(items) * 100) if items else 0
+
+        # Detect duplicates. We report the count but do not currently drop
+        # them — keeping the historical CLI behavior. Hence "detected", not
+        # "removed".
+        #
+        # detect_duplicates reads the first 64KB of every file, which on a
+        # 4k-item library can be several seconds of I/O after discovery
+        # progress hit 100%. Wrap it in phase_started/phase_complete so the
+        # UI shows "deduplication" instead of looking stalled.
+        self.reporter.phase_started("deduplication", total=len(items))
+        duplicates = detect_duplicates(items)
+        dupes_detected = len(duplicates)
+        self.reporter.phase_complete(
+            "deduplication",
+            message=f"{dupes_detected} duplicates" if dupes_detected else "none",
+        )
+
+        self.reporter.discovery_complete(
+            len(images),
+            len(videos),
+            date_range=date_range,
+            gps_coverage_percent=gps_coverage,
+            duplicates_detected=dupes_detected,
+        )
 
         # Pre-render estimate (deterministic, no FFmpeg).
         est = estimate_output(items, self.config)

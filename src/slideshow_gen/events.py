@@ -33,7 +33,14 @@ class Reporter(ABC):
     def started(self, config: dict[str, Any]) -> None: ...
 
     @abstractmethod
-    def discovery_complete(self, images: int, videos: int) -> None: ...
+    def discovery_complete(
+        self,
+        images: int,
+        videos: int,
+        date_range: tuple[str, str] | None = None,
+        gps_coverage_percent: float | None = None,
+        duplicates_detected: int | None = None,
+    ) -> None: ...
 
     @abstractmethod
     def estimate(
@@ -78,8 +85,22 @@ class ConsoleReporter(Reporter):
         if self.verbose:
             click.echo(f"  [pipeline] starting render with config: {config}")
 
-    def discovery_complete(self, images: int, videos: int) -> None:
-        click.echo(f"  Found {images} images and {videos} videos.")
+    def discovery_complete(
+        self,
+        images: int,
+        videos: int,
+        date_range: tuple[str, str] | None = None,
+        gps_coverage_percent: float | None = None,
+        duplicates_detected: int | None = None,
+    ) -> None:
+        msg = f"  Found {images} images and {videos} videos."
+        if date_range:
+            msg += f" (dates: {date_range[0]} to {date_range[1]})"
+        if gps_coverage_percent is not None:
+            msg += f" ({gps_coverage_percent:.1f}% with GPS)"
+        if duplicates_detected is not None and duplicates_detected > 0:
+            msg += f" ({duplicates_detected} duplicates detected)"
+        click.echo(msg)
 
     def estimate(
         self,
@@ -170,8 +191,22 @@ class JsonReporter(Reporter):
         }
         self._emit("started", config=safe_config)
 
-    def discovery_complete(self, images: int, videos: int) -> None:
-        self._emit("discovery_complete", images=images, videos=videos)
+    def discovery_complete(
+        self,
+        images: int,
+        videos: int,
+        date_range: tuple[str, str] | None = None,
+        gps_coverage_percent: float | None = None,
+        duplicates_detected: int | None = None,
+    ) -> None:
+        payload: dict[str, Any] = {"images": images, "videos": videos}
+        if date_range:
+            payload["date_range"] = {"earliest": date_range[0], "latest": date_range[1]}
+        if gps_coverage_percent is not None:
+            payload["gps_coverage_percent"] = round(gps_coverage_percent, 1)
+        if duplicates_detected is not None:
+            payload["duplicates_detected"] = duplicates_detected
+        self._emit("discovery_complete", **payload)
 
     def estimate(
         self,
