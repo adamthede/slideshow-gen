@@ -12,25 +12,26 @@
 | 4 | 2026-05-25 03:00 | 6 | 6 | 0 | 0 | 4701107 | 100% |
 | 5 | 2026-05-25 03:08 | 2 | 1 | 1 | 0 | 810fdfe | 50% |
 | 6 | 2026-05-25 08:10 | 8 | 5 | 3 | 0 | 73d6923 | 63% |
+| 7 | 2026-05-25 08:35 | 1 | 1 | 0 | 0 | 562f2a1 | 100% |
 
 ## Reviewer Effectiveness
 | Reviewer | Total Found | T1 (Must) | T2 (Should) | T3 (Consider) | T4 (Dismiss) | Actioned % | Signal:Noise |
 |----------|------------|-----------|-------------|---------------|-------------|-----------|-------------|
 | Copilot | 21 | 0 | 19 | 1 | 1 | 90% | 19:2 |
-| Gemini | 11 | 0 | 4 | 0 | 7 | 36% | 4:7 |
+| Gemini | 12 | 0 | 5 | 0 | 7 | 42% | 5:7 |
 
 ## Issue Categories (Cumulative)
 | Category | T1 | T2 | T3 | T4 | Total | % of All |
 |----------|----|----|----|----|-------|----------|
-| data-integrity | 0 | 6 | 0 | 0 | 6 | 19% |
-| error-handling | 0 | 7 | 0 | 3 | 10 | 31% |
-| style | 0 | 2 | 1 | 3 | 6 | 19% |
+| data-integrity | 0 | 7 | 0 | 0 | 7 | 21% |
+| error-handling | 0 | 7 | 0 | 3 | 10 | 30% |
+| style | 0 | 2 | 1 | 3 | 6 | 18% |
 | api-contract | 0 | 3 | 0 | 0 | 3 | 9% |
 | documentation | 0 | 2 | 0 | 1 | 3 | 9% |
 | performance | 0 | 1 | 0 | 0 | 1 | 3% |
 | test-coverage | 0 | 2 | 0 | 0 | 2 | 6% |
 
-**Status:** MAX CYCLES REACHED — cycle 6 exits at criterion 3 (cycle number ≥ 4). All 32 threads across 6 cycles resolved; 21 T2 fixes shipped across 4 substantive commits (cc7b3e4, 4701107, 810fdfe, 73d6923). Recurring T4 dismissals from Gemini (temp-file collision raised 3 times, Windows path 2 times) suggest a re-prompt would not produce new signal — re-invoke `/review-cycle 2` only if user pushes new code.
+**Status:** READY TO MERGE — 33 threads resolved across 7 cycles, 22 T2 fixes shipped across 5 substantive commits (cc7b3e4, 4701107, 810fdfe, 73d6923, 562f2a1). Zero T1s ever found. Bots are at diminishing returns: cycles 4-7 trended single-digit findings with a mix of real-but-small fixes and repeated dismissals. Recommend merging; cycle 7's exit is technically MAX CYCLES (criterion 3) but practical state matches READY TO MERGE.
 
 ## Cycle 1 — 2026-05-25 01:50
 
@@ -358,3 +359,26 @@ Message: `fix: Address PR #2 review cycle 6 — folder-mutation race, dedup phas
 
 ### Loop termination
 **Status:** MAX CYCLES REACHED (criterion 3 — cycle 6 ≥ 4 per skill cap). Bots re-requested via Copilot reviewer API + Gemini slash comment after cycle-6 push; wait (Step 7.6) skipped since cycle 6 exits regardless.
+
+## Cycle 7 — 2026-05-25 08:35
+
+### Actioned (1)
+
+#### T2-SHOULD: scan_directories double-counts files when --dir args overlap
+- **File:** `src/slideshow_gen/discovery.py:60`
+- **Category:** `data-integrity`
+- **Reviewer:** Gemini (`gemini-code-assist`)
+- **Comment:** "The `candidates` list can accumulate duplicate file paths if the input `dirs` contains overlapping roots (e.g., a parent directory and its subdirectory) or if the same directory is provided multiple times..."
+- **Disposition:** FIXED — switched the candidate accumulator from `list[Path]` to `set[Path]`, then sorted at the end. Path equality is by string, so same-folder-twice and parent-plus-subdirectory-under-recursive both dedupe correctly. Smoke-tested with `--dir A --dir A`: pre-fix reported `images: 112, duplicates_detected: 56`; post-fix reports `images: 56, duplicates_detected: 0`.
+- **Thread ID:** PRRT_kwDOR-Xvl86EjY6Y
+
+### Recurrence Patterns
+
+- **Trust-boundary validation at the periphery** — adds to the dashboard hotspot. The Rust shell dedupes by exact path string on the frontend (in `addFolders`), but the Python sidecar didn't dedupe at all. Cross-boundary assumption broke: two different path strings can refer to the same file (parent + subdirectory under recursive). Same root cause as the cycle-4 `loadSettings` validation gap: trusting whatever the boundary handed back.
+
+### Commit
+SHA: 562f2a1
+Message: `fix: Address PR #2 review cycle 7 — dedupe candidates across overlapping --dir args`
+
+### Loop termination
+**Status:** MAX CYCLES REACHED (criterion 3 — cycle 7 ≥ 4 per skill cap). Effective state is READY TO MERGE — see Summary status. Bots re-requested after cycle-7 push; wait (Step 7.6) skipped per the same exit rationale.
