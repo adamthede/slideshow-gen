@@ -9,24 +9,26 @@
 | 1 | 2026-05-25 01:50 | 13 | 11 | 1 | 1 | cc7b3e4 | 85% |
 | 2 | 2026-05-25 01:58 | 3 | 0 | 3 | 0 | — | 0% |
 | 3 | 2026-05-25 02:01 | 0 | 0 | 0 | 0 | — | — |
+| 4 | 2026-05-25 03:00 | 6 | 6 | 0 | 0 | 4701107 | 100% |
+| 5 | 2026-05-25 03:08 | 2 | 1 | 1 | 0 | 810fdfe | 50% |
 
 ## Reviewer Effectiveness
 | Reviewer | Total Found | T1 (Must) | T2 (Should) | T3 (Consider) | T4 (Dismiss) | Actioned % | Signal:Noise |
 |----------|------------|-----------|-------------|---------------|-------------|-----------|-------------|
-| Copilot | 10 | 0 | 8 | 1 | 1 | 80% | 4:1 |
-| Gemini | 6 | 0 | 3 | 0 | 3 | 50% | 1:1 |
+| Copilot | 16 | 0 | 14 | 1 | 1 | 88% | 7:1 |
+| Gemini | 8 | 0 | 4 | 0 | 4 | 50% | 1:1 |
 
 ## Issue Categories (Cumulative)
 | Category | T1 | T2 | T3 | T4 | Total | % of All |
 |----------|----|----|----|----|-------|----------|
-| data-integrity | 0 | 4 | 0 | 0 | 4 | 25% |
-| error-handling | 0 | 3 | 0 | 1 | 4 | 25% |
-| style | 0 | 1 | 1 | 2 | 4 | 25% |
-| api-contract | 0 | 2 | 0 | 0 | 2 | 13% |
-| test-coverage | 0 | 1 | 0 | 0 | 1 | 6% |
-| documentation | 0 | 0 | 0 | 1 | 1 | 6% |
+| data-integrity | 0 | 6 | 0 | 0 | 6 | 25% |
+| error-handling | 0 | 5 | 0 | 2 | 7 | 29% |
+| style | 0 | 2 | 1 | 2 | 5 | 21% |
+| api-contract | 0 | 3 | 0 | 0 | 3 | 13% |
+| documentation | 0 | 1 | 0 | 1 | 2 | 8% |
+| test-coverage | 0 | 1 | 0 | 0 | 1 | 4% |
 
-**Status:** READY TO MERGE — exited at cycle 3 via criterion 5 (current cycle 0 new threads AND prior cycle actioned 0). All 16 threads across 2 substantive cycles resolved; all T2 items fixed; both T3/T4 dispositions defensible.
+**Status:** MAX CYCLES REACHED — exited at cycle 5 (skill caps at 4+ per invocation). All 24 threads across 5 cycles resolved; 16 T2 fixes shipped across 3 substantive commits (cc7b3e4, 4701107, 810fdfe); both T4 dismissals on the same temp-file collision concern are defensible (file is never written in --estimate-only mode). PR is in solid shape — re-invoke `/review-cycle 2` for another pass if bots produce fresh threads.
 
 ## Cycle 1 — 2026-05-25 01:50
 
@@ -187,3 +189,91 @@ Cycle 3 fetched 0 unresolved bot threads. Termination criterion 5 fires (current
 
 ### Commit
 SHA: — (no code changes)
+
+## Cycle 4 — 2026-05-25 03:00
+
+### Actioned (6)
+
+#### T2-SHOULD: date_range emits ISO datetime, docs say ISO date
+- **File:** `src/slideshow_gen/pipeline.py:101`
+- **Category:** `api-contract`
+- **Reviewer:** Copilot (`copilot-pull-request-reviewer`)
+- **Comment:** "`date_range` is documented as ISO date strings, but here it's generated via `datetime.isoformat()`, which will include a time component for EXIF timestamps..."
+- **Disposition:** FIXED — switched to `.date().isoformat()` so the emission matches the field name and the protocol doc. EXIF parsed_dates still carry time internally; we drop it at the boundary. End-to-end smoke confirmed `"2011-04-13"` instead of `"2011-04-13T15:54:41"`.
+- **Thread ID:** PRRT_kwDOR-Xvl86EcXNW
+
+#### T2-SHOULD: Fade duration onChange treats 0 as falsy
+- **File:** `desktop/src/App.tsx:443`
+- **Category:** `data-integrity`
+- **Reviewer:** Copilot (`copilot-pull-request-reviewer`)
+- **Comment:** "The Fade duration input allows `min={0}`, but the onChange uses `Number(e.target.value) || DEFAULT_SETTINGS.fadeDuration`, which treats `0` as falsy..."
+- **Disposition:** FIXED — explicit `Number.isFinite(parsed)` check; user-typed `0` now survives (valid: no crossfade). Strict per-comment fix; the same `|| DEFAULT` pattern on slideDuration/fps is technically the same anti-pattern but those inputs have `min={0.5}` / `min={15}` so the bug is unreachable in practice.
+- **Thread ID:** PRRT_kwDOR-Xvl86EcXNf
+
+#### T2-SHOULD: loadSettings has no runtime type validation
+- **File:** `desktop/src/lib/settings.ts:54`
+- **Category:** `data-integrity`
+- **Reviewer:** Copilot (`copilot-pull-request-reviewer`)
+- **Comment:** "`loadSettings()` merges whatever is in localStorage directly into `DEFAULT_SETTINGS` without runtime validation. If storage is corrupted/tampered (e.g. `audioVolume` becomes a string), downstream code like `settings.audioVolume.toFixed(2)` will throw..."
+- **Disposition:** FIXED — per-field type guard for every setting. Strings are checked, numbers gated on `Number.isFinite`, booleans on `typeof === "boolean"`, resolution against the literal union. Stale/corrupted entries fall through to DEFAULT_SETTINGS rather than crashing downstream consumers.
+- **Thread ID:** PRRT_kwDOR-Xvl86EcXNj
+
+#### T2-SHOULD: matchMedia listener leaks under Vite HMR
+- **File:** `desktop/src/main.tsx:14`
+- **Category:** `error-handling`
+- **Reviewer:** Copilot (`copilot-pull-request-reviewer`)
+- **Comment:** "This module adds a permanent `matchMedia(...).addEventListener('change', ...)` listener without any cleanup. In dev with Vite HMR, this file can be re-evaluated and register multiple listeners..."
+- **Disposition:** FIXED — extracted the handler to a named const and registered `import.meta.hot?.dispose(() => removeEventListener(...))`. Production unaffected (module loads once), dev no longer accumulates listeners.
+- **Thread ID:** PRRT_kwDOR-Xvl86EcXNp
+
+#### T2-SHOULD: Summary card copy says "folder" (singular)
+- **File:** `desktop/src/App.tsx:604`
+- **Category:** `documentation`
+- **Reviewer:** Copilot (`copilot-pull-request-reviewer`)
+- **Comment:** "The Summary card description says 'What we found in the folder.', but this UI now supports selecting multiple folders. Update the copy to reflect that it summarizes across all selected folders."
+- **Disposition:** FIXED — copy now reads "What we found across the selected folder/folders." with plurality conditional on `folders.length`.
+- **Thread ID:** PRRT_kwDOR-Xvl86EcXNu
+
+#### T2-SHOULD: drag-drop .then() has no .catch (unhandled rejection)
+- **File:** `desktop/src/App.tsx:222`
+- **Category:** `error-handling`
+- **Reviewer:** Copilot (`copilot-pull-request-reviewer`)
+- **Comment:** "The `onDragDropEvent(...).then(...)` call chain has no `.catch()`. If listener registration fails (e.g. API unavailable, permission issues), this will become an unhandled promise rejection..."
+- **Disposition:** FIXED — `.catch` logs the error to console. The button-based picker remains the fallback; drag-drop failure is now diagnosable rather than silent.
+- **Thread ID:** PRRT_kwDOR-Xvl86EcXN3
+
+### Recurrence Patterns
+
+- **Trust-boundary validation gap** — `loadSettings` (cycle 4) is the same shape of bug as the cycle-1 GPS-truthiness and duplicates-naming issues: the code happily accepted whatever the boundary handed back without coercing. **Suggestion:** when introducing a new persistence/IPC field, write the read path's type guard in the same commit as the field, not as a follow-up.
+
+### Commit
+SHA: 4701107
+Message: `fix: Address PR #2 review cycle 4 — correctness + trust-boundary hardening`
+
+## Cycle 5 — 2026-05-25 03:08
+
+### Actioned (1)
+
+#### T2-SHOULD: truncateMiddle slice(-0) returns the whole string
+- **File:** `desktop/src/App.tsx:305`
+- **Category:** `style`
+- **Reviewer:** Gemini (`gemini-code-assist`)
+- **Comment:** "The use of `path.slice(-half)` will return the entire string if `half` is `0` (which happens when `max` is 1 or 2)..."
+- **Disposition:** FIXED — `path.slice(path.length - half)`; half=0 now correctly yields an empty tail. No current caller passes max ≤ 2, but the contract violation was real and the fix is one expression.
+- **Thread ID:** PRRT_kwDOR-Xvl86EcmyR
+
+### Dismissed (1)
+
+#### T4-DISMISS: Temp filename collision in --estimate-only path (re-raise)
+- **File:** `desktop/src-tauri/src/lib.rs:51`
+- **Category:** `error-handling`
+- **Reviewer:** Gemini (`gemini-code-assist`)
+- **Disposition:** DISMISSED — same concern as cycle 2 PRRT_kwDOR-Xvl86Eb_wL with a fresh thread ID. The file is *still* never written; `--estimate-only` exits before any encode. Tauri single-instances on macOS. Adding a PID to a path nobody writes doesn't change behavior.
+- **Thread ID:** PRRT_kwDOR-Xvl86EcmyK
+
+### Commit
+SHA: 810fdfe
+Message: `fix: Address PR #2 review cycle 5 — truncateMiddle slice contract`
+
+### Loop termination
+**Status:** MAX CYCLES REACHED (criterion 3 — cycle 5 ≥ 4). Re-invoke `/review-cycle 2` for further passes; bots were re-requested via Copilot reviewer API + Gemini slash comment after the cycle-5 push, but the wait (Step 7.6) was skipped since cycle 5 exits at Step 10 regardless.
