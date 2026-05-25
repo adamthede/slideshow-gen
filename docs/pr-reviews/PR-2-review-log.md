@@ -11,24 +11,26 @@
 | 3 | 2026-05-25 02:01 | 0 | 0 | 0 | 0 | — | — |
 | 4 | 2026-05-25 03:00 | 6 | 6 | 0 | 0 | 4701107 | 100% |
 | 5 | 2026-05-25 03:08 | 2 | 1 | 1 | 0 | 810fdfe | 50% |
+| 6 | 2026-05-25 08:10 | 8 | 5 | 3 | 0 | 73d6923 | 63% |
 
 ## Reviewer Effectiveness
 | Reviewer | Total Found | T1 (Must) | T2 (Should) | T3 (Consider) | T4 (Dismiss) | Actioned % | Signal:Noise |
 |----------|------------|-----------|-------------|---------------|-------------|-----------|-------------|
-| Copilot | 16 | 0 | 14 | 1 | 1 | 88% | 7:1 |
-| Gemini | 8 | 0 | 4 | 0 | 4 | 50% | 1:1 |
+| Copilot | 21 | 0 | 19 | 1 | 1 | 90% | 19:2 |
+| Gemini | 11 | 0 | 4 | 0 | 7 | 36% | 4:7 |
 
 ## Issue Categories (Cumulative)
 | Category | T1 | T2 | T3 | T4 | Total | % of All |
 |----------|----|----|----|----|-------|----------|
-| data-integrity | 0 | 6 | 0 | 0 | 6 | 25% |
-| error-handling | 0 | 5 | 0 | 2 | 7 | 29% |
-| style | 0 | 2 | 1 | 2 | 5 | 21% |
-| api-contract | 0 | 3 | 0 | 0 | 3 | 13% |
-| documentation | 0 | 1 | 0 | 1 | 2 | 8% |
-| test-coverage | 0 | 1 | 0 | 0 | 1 | 4% |
+| data-integrity | 0 | 6 | 0 | 0 | 6 | 19% |
+| error-handling | 0 | 7 | 0 | 3 | 10 | 31% |
+| style | 0 | 2 | 1 | 3 | 6 | 19% |
+| api-contract | 0 | 3 | 0 | 0 | 3 | 9% |
+| documentation | 0 | 2 | 0 | 1 | 3 | 9% |
+| performance | 0 | 1 | 0 | 0 | 1 | 3% |
+| test-coverage | 0 | 2 | 0 | 0 | 2 | 6% |
 
-**Status:** MAX CYCLES REACHED — exited at cycle 5 (skill caps at 4+ per invocation). All 24 threads across 5 cycles resolved; 16 T2 fixes shipped across 3 substantive commits (cc7b3e4, 4701107, 810fdfe); both T4 dismissals on the same temp-file collision concern are defensible (file is never written in --estimate-only mode). PR is in solid shape — re-invoke `/review-cycle 2` for another pass if bots produce fresh threads.
+**Status:** MAX CYCLES REACHED — cycle 6 exits at criterion 3 (cycle number ≥ 4). All 32 threads across 6 cycles resolved; 21 T2 fixes shipped across 4 substantive commits (cc7b3e4, 4701107, 810fdfe, 73d6923). Recurring T4 dismissals from Gemini (temp-file collision raised 3 times, Windows path 2 times) suggest a re-prompt would not produce new signal — re-invoke `/review-cycle 2` only if user pushes new code.
 
 ## Cycle 1 — 2026-05-25 01:50
 
@@ -277,3 +279,82 @@ Message: `fix: Address PR #2 review cycle 5 — truncateMiddle slice contract`
 
 ### Loop termination
 **Status:** MAX CYCLES REACHED (criterion 3 — cycle 5 ≥ 4). Re-invoke `/review-cycle 2` for further passes; bots were re-requested via Copilot reviewer API + Gemini slash comment after the cycle-5 push, but the wait (Step 7.6) was skipped since cycle 5 exits at Step 10 regardless.
+
+## Cycle 6 — 2026-05-25 08:10
+
+### Actioned (5 threads → 4 distinct fixes)
+
+#### T2-SHOULD: addFolders mutates state during in-flight scan
+- **File:** `desktop/src/App.tsx:213`
+- **Category:** `error-handling`
+- **Reviewer:** Copilot (`copilot-pull-request-reviewer`)
+- **Comment:** "Folder selection can still change while a scan is running: `addFolders()` always calls `reset()`, and the drag/drop handler calls `addFolders(...)` even when `state.running` is true..."
+- **Disposition:** FIXED — guarded `addFolders` with `if (state.running) return`. Covers both the drop handler and the picker. Cycle 4 disabled the × button but missed this entry point.
+- **Thread ID:** PRRT_kwDOR-Xvl86EjOH0
+
+#### T2-SHOULD: Add/Choose folder button enabled during scan (same bug)
+- **File:** `desktop/src/App.tsx:339`
+- **Category:** `error-handling`
+- **Reviewer:** Copilot (`copilot-pull-request-reviewer`)
+- **Comment:** "The 'Add/Choose folder' button remains enabled during `running`..."
+- **Disposition:** FIXED — added `disabled={running}` on the picker button. Defense-in-depth alongside the `addFolders` guard above.
+- **Thread ID:** PRRT_kwDOR-Xvl86EjOIO
+
+#### T2-SHOULD: detect_duplicates is slow with no progress signal
+- **File:** `src/slideshow_gen/pipeline.py:125`
+- **Category:** `performance`
+- **Reviewer:** Copilot (`copilot-pull-request-reviewer`)
+- **Comment:** "`detect_duplicates(items)` does a separate pass that stats and reads the first 64KB of every file. With large libraries this can be a noticeable chunk of time after discovery progress reaches 100%..."
+- **Disposition:** FIXED — wrapped detect_duplicates in `phase_started("deduplication")` + `phase_complete("deduplication")` so the UI shows what's happening rather than appearing stalled. Also added "deduplication" to the documented Phase enum (sidecar-protocol.md) and the TypeScript Phase union (sidecar-events.ts). Smoke confirmed event ordering: discovery progress → deduplication start/complete → discovery_complete.
+- **Thread ID:** PRRT_kwDOR-Xvl86EjOIf
+
+#### T2-SHOULD: start_scan doc comment outdated (singular "folder")
+- **File:** `desktop/src-tauri/src/lib.rs:40`
+- **Category:** `documentation`
+- **Reviewer:** Copilot (`copilot-pull-request-reviewer`)
+- **Comment:** "The function now accepts `folders: Vec<String>` (multi-dir), but the doc comment still says 'Start a scan against a folder.'..."
+- **Disposition:** FIXED — comment now reads "Start a scan against one or more folders... Each folder is forwarded as a separate `--dir` argument".
+- **Thread ID:** PRRT_kwDOR-Xvl86EjOIo
+
+#### T2-SHOULD: IPC test doesn't assert new discovery_complete fields
+- **File:** `tests/test_ipc_protocol.py:68`
+- **Category:** `test-coverage`
+- **Reviewer:** Copilot (`copilot-pull-request-reviewer`)
+- **Comment:** "This test update focuses on allowing throttled `progress` events, but it still doesn't assert the new `discovery_complete` metadata fields (`date_range`, `gps_coverage_percent`, `duplicates_detected`)..."
+- **Disposition:** FIXED — explicit asserts for `date_range == {earliest: "2026-05-23", latest: "2026-05-23"}`, `gps_coverage_percent == 0.0`, `duplicates_detected == 0`. Also relaxed the rigid `non_progress` sequence assertion to ordering-based checks so it tolerates the new deduplication phase pair.
+- **Thread ID:** PRRT_kwDOR-Xvl86EjOI4
+
+### Dismissed (3)
+
+#### T4-DISMISS: Temp filename collision (3rd re-raise)
+- **File:** `desktop/src-tauri/src/lib.rs:51`
+- **Category:** `error-handling`
+- **Reviewer:** Gemini (`gemini-code-assist`)
+- **Disposition:** DISMISSED — same as cycle 2 (Eb_wL) and cycle 5 (EcmyK). The throwaway output path is for `--estimate-only` which exits before any encode; the file is never written. Gemini's own comment acknowledges this and still suggests fixing "in case future renders are added" — that's a problem to solve when Epic 4 adds real renders, not now.
+- **Thread ID:** PRRT_kwDOR-Xvl86Ecqxu
+
+#### T4-DISMISS: Windows path split (2nd re-raise)
+- **File:** `desktop/src/App.tsx:159`
+- **Category:** `style`
+- **Reviewer:** Gemini (`gemini-code-assist`)
+- **Disposition:** DISMISSED — same as cycle 2 (Eb_wS, Eb_wT). PRD NFR6 and ADR-0001 lock v1 to macOS only. Adding Windows-aware path code is dead code today.
+- **Thread ID:** PRRT_kwDOR-Xvl86Ecqxv
+
+#### T4-DISMISS: truncateMiddle edge-case "jumpiness"
+- **File:** `desktop/src/App.tsx:308`
+- **Category:** `style`
+- **Reviewer:** Gemini (`gemini-code-assist`)
+- **Disposition:** DISMISSED — hypothetical concerns: (a) when `path.length == max + 1` the output is 79 chars to fit a max-80 budget (that's correct truncation, not a bug — output ≤ max is the contract); (b) when `max ≤ 2` the output is just "…" (no current caller passes max < 80). Gemini already extracted the real bug here in cycle 5 (slice(-0)); this follow-up is hand-wringing about the algorithm's defined behavior.
+- **Thread ID:** PRRT_kwDOR-Xvl86Ecqxy
+
+### Recurrence Patterns
+
+- **Mid-scan state mutation via every entry point** — cycle 4 disabled the × button, cycle 6 caught two more entry points (drop handler + picker button) for the same class of bug. **Suggestion already in dashboard hotspot:** when adding a new "running" client-side action, audit every entry point that calls `reset()` or mutates session state, not just the most obvious one.
+- **Gemini repeatedly re-raises dismissed items on re-review** — temp-file collision raised 3 times, Windows path split raised 2 times. **No code action**; flagged as a meta-pattern so future cycles know to dismiss these immediately if Gemini surfaces them again without new context.
+
+### Commit
+SHA: 73d6923
+Message: `fix: Address PR #2 review cycle 6 — folder-mutation race, dedup phase, doc + test gaps`
+
+### Loop termination
+**Status:** MAX CYCLES REACHED (criterion 3 — cycle 6 ≥ 4 per skill cap). Bots re-requested via Copilot reviewer API + Gemini slash comment after cycle-6 push; wait (Step 7.6) skipped since cycle 6 exits regardless.
