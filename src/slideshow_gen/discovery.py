@@ -46,7 +46,11 @@ def scan_directories(
     # Two-pass so on_progress callers get an accurate total. The candidate
     # walk only does is_file() + extension check (no metadata reads), so it's
     # negligible against the enrichment pass even for 10k+ folders.
-    candidates: list[Path] = []
+    #
+    # Use a set to dedupe: overlapping `dirs` (e.g. user passes a parent
+    # and its subdirectory under --recursive, or the same dir twice) would
+    # otherwise produce inflated counts and double-count items in estimates.
+    candidates_set: set[Path] = set()
     valid_exts = IMAGE_EXTENSIONS | VIDEO_EXTENSIONS
     for dir_path in dirs:
         if not dir_path.is_dir():
@@ -55,8 +59,8 @@ def scan_directories(
         iterator = dir_path.rglob("*") if recursive else dir_path.iterdir()
         for f in iterator:
             if f.is_file() and f.suffix.lower() in valid_exts:
-                candidates.append(f)
-    candidates.sort()
+                candidates_set.add(f)
+    candidates = sorted(candidates_set)
     total = len(candidates)
 
     items = []
