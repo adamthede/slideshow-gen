@@ -19,6 +19,14 @@ export interface RenderSettings {
   audioTrack: string | null;
   /** 0.0 silent → 1.0 source level. Ignored when audioTrack is null. */
   audioVolume: number;
+  /** Skip Ken Burns motion — static images with crossfades. */
+  staticMode: boolean;
+  /** Shuffle order instead of chronological. */
+  randomOrder: boolean;
+  /** Disable all text overlays (supersedes the per-overlay flags). */
+  noOverlays: boolean;
+  noDate: boolean;
+  noLocation: boolean;
 }
 
 export const DEFAULT_SETTINGS: RenderSettings = {
@@ -29,6 +37,11 @@ export const DEFAULT_SETTINGS: RenderSettings = {
   recursive: false,
   audioTrack: null,
   audioVolume: 1.0,
+  staticMode: false,
+  randomOrder: false,
+  noOverlays: false,
+  noDate: false,
+  noLocation: false,
 };
 
 const STORAGE_KEY = "marquee.renderSettings.v1";

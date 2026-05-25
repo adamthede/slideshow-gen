@@ -110,6 +110,36 @@ function Field({
   );
 }
 
+function Toggle({
+  label,
+  checked,
+  onChange,
+  disabled,
+}: {
+  label: string;
+  checked: boolean;
+  onChange: (v: boolean) => void;
+  disabled?: boolean;
+}) {
+  return (
+    <label
+      className={
+        "flex items-center gap-3 text-sm " +
+        (disabled ? "cursor-not-allowed opacity-50" : "cursor-pointer")
+      }
+    >
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={(e) => onChange(e.target.checked)}
+        disabled={disabled}
+        className="h-4 w-4"
+      />
+      <span>{label}</span>
+    </label>
+  );
+}
+
 function settingsSummary(s: RenderSettings): string {
   const parts = [
     s.resolution,
@@ -118,6 +148,13 @@ function settingsSummary(s: RenderSettings): string {
     `${s.fps}fps`,
   ];
   if (s.recursive) parts.push("recursive");
+  if (s.staticMode) parts.push("static");
+  if (s.randomOrder) parts.push("random");
+  if (s.noOverlays) parts.push("no overlays");
+  else {
+    if (s.noDate) parts.push("no date");
+    if (s.noLocation) parts.push("no location");
+  }
   if (s.audioTrack) {
     const name = s.audioTrack.split("/").pop() ?? "audio";
     parts.push(`audio: ${name}`);
@@ -232,6 +269,12 @@ function App() {
         overrides.audioVolume = settings.audioVolume;
       }
     }
+    if (settings.staticMode) overrides.staticMode = true;
+    if (settings.randomOrder) overrides.randomOrder = true;
+    if (settings.noOverlays) overrides.noOverlays = true;
+    if (settings.noDate) overrides.noDate = true;
+    if (settings.noLocation) overrides.noLocation = true;
+
     await start(
       folders,
       Object.keys(overrides).length ? overrides : undefined,
@@ -403,6 +446,41 @@ function App() {
 
               <div className="md:col-span-2 border-t pt-5 space-y-3">
                 <div className="text-xs uppercase tracking-wide text-muted-foreground">
+                  Appearance
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                  <Toggle
+                    label="Static (skip Ken Burns motion)"
+                    checked={settings.staticMode}
+                    onChange={(v) => update("staticMode", v)}
+                  />
+                  <Toggle
+                    label="Random order"
+                    checked={settings.randomOrder}
+                    onChange={(v) => update("randomOrder", v)}
+                  />
+                  <Toggle
+                    label="Hide all overlays"
+                    checked={settings.noOverlays}
+                    onChange={(v) => update("noOverlays", v)}
+                  />
+                  <Toggle
+                    label="Hide date overlay"
+                    checked={settings.noDate}
+                    onChange={(v) => update("noDate", v)}
+                    disabled={settings.noOverlays}
+                  />
+                  <Toggle
+                    label="Hide location overlay"
+                    checked={settings.noLocation}
+                    onChange={(v) => update("noLocation", v)}
+                    disabled={settings.noOverlays}
+                  />
+                </div>
+              </div>
+
+              <div className="md:col-span-2 border-t pt-5 space-y-3">
+                <div className="text-xs uppercase tracking-wide text-muted-foreground">
                   Background audio
                 </div>
                 <div className="flex items-center gap-3">
@@ -433,12 +511,23 @@ function App() {
                       min={0}
                       max={2}
                       step={0.05}
+                      list="audio-volume-ticks"
                       value={settings.audioVolume}
                       onChange={(e) =>
                         update("audioVolume", Number(e.target.value))
                       }
                       className="w-full"
                     />
+                    <datalist id="audio-volume-ticks">
+                      <option value="0" />
+                      <option value="1" />
+                      <option value="2" />
+                    </datalist>
+                    <div className="flex justify-between text-[10px] uppercase tracking-wide text-muted-foreground -mt-1">
+                      <span>0×</span>
+                      <span>1×</span>
+                      <span>2×</span>
+                    </div>
                   </Field>
                 )}
               </div>
@@ -460,11 +549,31 @@ function App() {
             <CardHeader>
               <CardTitle>Scanning…</CardTitle>
               <CardDescription>
-                {phase
-                  ? `Phase: ${phase}${progress ? ` (${progress.done}/${progress.total})` : ""}`
-                  : "Starting up…"}
+                {progress
+                  ? `${progress.done.toLocaleString()} / ${progress.total.toLocaleString()} files`
+                  : phase
+                    ? `Starting ${phase}…`
+                    : "Starting up…"}
               </CardDescription>
             </CardHeader>
+            {progress && progress.total > 0 && (
+              <CardContent>
+                <div
+                  className="h-2 w-full overflow-hidden rounded-full bg-muted"
+                  role="progressbar"
+                  aria-valuemin={0}
+                  aria-valuemax={progress.total}
+                  aria-valuenow={progress.done}
+                >
+                  <div
+                    className="h-full bg-primary transition-[width] duration-150 ease-out"
+                    style={{
+                      width: `${Math.min(100, (progress.done / progress.total) * 100)}%`,
+                    }}
+                  />
+                </div>
+              </CardContent>
+            )}
           </Card>
         )}
 

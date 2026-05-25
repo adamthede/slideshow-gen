@@ -20,6 +20,13 @@ struct ScanSettings {
     /// Volume 0.0–N for the background track. Only applied when
     /// `audio_track` is also set.
     audio_volume: Option<f64>,
+    /// Render-appearance flags — each maps directly to the matching CLI
+    /// switch when true.
+    static_mode: Option<bool>,
+    random_order: Option<bool>,
+    no_overlays: Option<bool>,
+    no_date: Option<bool>,
+    no_location: Option<bool>,
 }
 
 /// Start a scan against a folder. For E2 this is always
@@ -83,6 +90,21 @@ async fn start_scan(
                     args.push(vol.to_string());
                 }
             }
+        }
+        if s.static_mode.unwrap_or(false) {
+            args.push("--static".into());
+        }
+        if s.random_order.unwrap_or(false) {
+            args.push("--random".into());
+        }
+        if s.no_overlays.unwrap_or(false) {
+            args.push("--no-overlays".into());
+        }
+        if s.no_date.unwrap_or(false) {
+            args.push("--no-date".into());
+        }
+        if s.no_location.unwrap_or(false) {
+            args.push("--no-location".into());
         }
     }
 

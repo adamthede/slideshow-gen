@@ -67,8 +67,21 @@ class RenderPipeline:
         # per-file). Defer the hard FFmpeg preflight until we know we're about
         # to render — that way `--estimate-only` works even on machines where
         # ffmpeg isn't on PATH (e.g. inside a macOS .app's subprocess env).
+        # Emit `phase_started` without a total — the candidate count is only
+        # known after the first walk inside scan_directories. Progress ticks
+        # carry both done and total so the UI can render a bar without ever
+        # having seen the phase_started total field.
         self.reporter.phase_started("discovery")
-        items = scan_directories(self.dirs, verbose=self.config.verbose, recursive=self.recursive)
+
+        def _on_discovery_progress(done: int, total: int, name: str) -> None:
+            self.reporter.progress("discovery", done, total, message=name)
+
+        items = scan_directories(
+            self.dirs,
+            verbose=self.config.verbose,
+            recursive=self.recursive,
+            on_progress=_on_discovery_progress,
+        )
         items = sort_items(items, random=self.config.random_order)
 
         if not items:

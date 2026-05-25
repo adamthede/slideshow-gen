@@ -55,13 +55,24 @@ def test_ipc_estimate_only_lifecycle(tmp_path):
 
     assert rc == 0
     types = [e["type"] for e in events]
-    assert types == [
+    # Discovery emits zero or more `progress` ticks between phase_started
+    # and discovery_complete (PROGRESS_STRIDE=25 in discovery.py, so a
+    # 3-image fixture only fires the final one).
+    non_progress = [t for t in types if t != "progress"]
+    assert non_progress == [
         "started",
         "phase_started",
         "discovery_complete",
         "estimate",
         "info",
     ]
+    # Any discovery progress events must sit between phase_started and
+    # discovery_complete and reference the discovery phase.
+    for i, e in enumerate(events):
+        if e["type"] != "progress":
+            continue
+        assert e["phase"] == "discovery"
+        assert 0 < e["done"] <= e["total"]
 
     # Required common fields on every event
     for e in events:

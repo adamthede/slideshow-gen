@@ -79,6 +79,8 @@ Progress tick within a phase. Fires on each completed unit (image rendered, batc
 
 `message` is an optional human-friendly hint (e.g. `"2 clips"` during batching).
 
+For the `discovery` phase, progress is throttled to every 25th item (plus the final tick) and `message` carries the current filename. Embedders should treat progress as throttled regardless of phase — `done` is monotonic but not strictly contiguous.
+
 ### `phase_complete`
 
 A phase finished cleanly.
