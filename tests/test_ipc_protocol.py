@@ -67,12 +67,24 @@ def test_ipc_estimate_only_lifecycle(tmp_path):
         "info",
     ]
     # Any discovery progress events must sit between phase_started and
-    # discovery_complete and reference the discovery phase.
+    # discovery_complete, reference the discovery phase, and have monotonic
+    # `done` values.
+    phase_started_idx = next(i for i, e in enumerate(events) if e["type"] == "phase_started")
+    discovery_complete_idx = next(
+        i for i, e in enumerate(events) if e["type"] == "discovery_complete"
+    )
+    last_done = 0
     for i, e in enumerate(events):
         if e["type"] != "progress":
             continue
+        assert phase_started_idx < i < discovery_complete_idx, (
+            f"progress at idx {i} not between phase_started ({phase_started_idx}) "
+            f"and discovery_complete ({discovery_complete_idx})"
+        )
         assert e["phase"] == "discovery"
         assert 0 < e["done"] <= e["total"]
+        assert e["done"] >= last_done, "discovery progress.done must be monotonic"
+        last_done = e["done"]
 
     # Required common fields on every event
     for e in events:

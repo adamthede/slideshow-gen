@@ -100,20 +100,25 @@ class RenderPipeline:
                 latest = max(parsed_dates)
                 date_range = (earliest.isoformat(), latest.isoformat())
 
-        # Compute GPS coverage %
-        gps_items = sum(1 for i in items if i.gps_lat and i.gps_lon)
+        # Compute GPS coverage % — explicit None check; (0.0, 0.0) is a
+        # valid coordinate (Equator + Prime Meridian intersection).
+        gps_items = sum(
+            1 for i in items if i.gps_lat is not None and i.gps_lon is not None
+        )
         gps_coverage = (gps_items / len(items) * 100) if items else 0
 
-        # Detect duplicates
+        # Detect duplicates. We report the count but do not currently drop
+        # them — keeping the historical CLI behavior. Hence "detected", not
+        # "removed".
         duplicates = detect_duplicates(items)
-        dupes_removed = len(duplicates)
+        dupes_detected = len(duplicates)
 
         self.reporter.discovery_complete(
             len(images),
             len(videos),
             date_range=date_range,
             gps_coverage_percent=gps_coverage,
-            duplicates_removed=dupes_removed,
+            duplicates_detected=dupes_detected,
         )
 
         # Pre-render estimate (deterministic, no FFmpeg).

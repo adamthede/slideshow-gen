@@ -39,7 +39,7 @@ class Reporter(ABC):
         videos: int,
         date_range: tuple[str, str] | None = None,
         gps_coverage_percent: float | None = None,
-        duplicates_removed: int | None = None,
+        duplicates_detected: int | None = None,
     ) -> None: ...
 
     @abstractmethod
@@ -91,15 +91,15 @@ class ConsoleReporter(Reporter):
         videos: int,
         date_range: tuple[str, str] | None = None,
         gps_coverage_percent: float | None = None,
-        duplicates_removed: int | None = None,
+        duplicates_detected: int | None = None,
     ) -> None:
         msg = f"  Found {images} images and {videos} videos."
         if date_range:
             msg += f" (dates: {date_range[0]} to {date_range[1]})"
         if gps_coverage_percent is not None:
             msg += f" ({gps_coverage_percent:.1f}% with GPS)"
-        if duplicates_removed is not None and duplicates_removed > 0:
-            msg += f" ({duplicates_removed} duplicates detected)"
+        if duplicates_detected is not None and duplicates_detected > 0:
+            msg += f" ({duplicates_detected} duplicates detected)"
         click.echo(msg)
 
     def estimate(
@@ -197,15 +197,15 @@ class JsonReporter(Reporter):
         videos: int,
         date_range: tuple[str, str] | None = None,
         gps_coverage_percent: float | None = None,
-        duplicates_removed: int | None = None,
+        duplicates_detected: int | None = None,
     ) -> None:
-        payload: dict[str, any] = {"images": images, "videos": videos}
+        payload: dict[str, Any] = {"images": images, "videos": videos}
         if date_range:
             payload["date_range"] = {"earliest": date_range[0], "latest": date_range[1]}
         if gps_coverage_percent is not None:
             payload["gps_coverage_percent"] = round(gps_coverage_percent, 1)
-        if duplicates_removed is not None:
-            payload["duplicates_removed"] = duplicates_removed
+        if duplicates_detected is not None:
+            payload["duplicates_detected"] = duplicates_detected
         self._emit("discovery_complete", **payload)
 
     def estimate(

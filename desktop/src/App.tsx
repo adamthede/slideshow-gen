@@ -58,8 +58,8 @@ function summarize(event: SidecarEvent): string {
       if (event.gps_coverage_percent !== undefined) {
         msg += ` · ${event.gps_coverage_percent.toFixed(0)}% GPS`;
       }
-      if (event.duplicates_removed !== undefined && event.duplicates_removed > 0) {
-        msg += ` · ${event.duplicates_removed} dupes`;
+      if (event.duplicates_detected !== undefined && event.duplicates_detected > 0) {
+        msg += ` · ${event.duplicates_detected} dupes`;
       }
       return msg;
     }
@@ -198,6 +198,10 @@ function App() {
   }
 
   useEffect(() => {
+    // Guard against the unmount-before-listener-registered race: if cleanup
+    // runs before the onDragDropEvent promise resolves, set a flag and
+    // invoke the unlisten as soon as we receive it.
+    let cancelled = false;
     let unlisten: (() => void) | null = null;
     getCurrentWebview()
       .onDragDropEvent((event) => {
@@ -211,9 +215,14 @@ function App() {
         }
       })
       .then((fn) => {
-        unlisten = fn;
+        if (cancelled) {
+          fn();
+        } else {
+          unlisten = fn;
+        }
       });
     return () => {
+      cancelled = true;
       unlisten?.();
     };
     // addFolders/reset are stable enough — re-running this effect on
@@ -340,7 +349,8 @@ function App() {
                     <button
                       type="button"
                       onClick={() => removeFolder(p)}
-                      className="shrink-0 text-muted-foreground hover:text-foreground transition-colors"
+                      disabled={running}
+                      className="shrink-0 text-muted-foreground hover:text-foreground disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
                       aria-label={`Remove ${p}`}
                     >
                       ×
@@ -608,8 +618,8 @@ function App() {
               <Stat
                 label="Duplicates"
                 value={
-                  discovery.duplicates_removed !== undefined
-                    ? discovery.duplicates_removed.toLocaleString()
+                  discovery.duplicates_detected !== undefined
+                    ? discovery.duplicates_detected.toLocaleString()
                     : "—"
                 }
               />

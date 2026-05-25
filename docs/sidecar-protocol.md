@@ -93,18 +93,19 @@ A phase finished cleanly.
 
 ### `discovery_complete`
 
-Convenience event emitted at the end of `discovery` with parsed counts and optional metadata. Always fires before the first non-discovery `phase_started`.
+Convenience event emitted at the end of `discovery` with parsed counts and metadata. Always fires before the first non-discovery `phase_started`.
 
 ```json
 {"v": 1, "t": 0.08, "type": "discovery_complete", "images": 4127, "videos": 23,
  "date_range": {"earliest": "2020-01-15", "latest": "2024-05-23"},
  "gps_coverage_percent": 87.3,
- "duplicates_removed": 12}
+ "duplicates_detected": 12}
 ```
 
-- `date_range`: Object with `earliest` and `latest` ISO date strings. Present only if parsed dates were found during discovery.
-- `gps_coverage_percent`: Percentage of items with valid GPS coordinates (0–100). Present only if any items have GPS data.
-- `duplicates_removed`: Count of duplicate items detected via content hash. Present only if duplicates were found.
+- `images`, `videos`: Always present. Counts of each media type after discovery.
+- `date_range`: Object with `earliest` and `latest` ISO date strings. **Omitted** when no parsed dates were found during discovery — embedders must handle absence.
+- `gps_coverage_percent`: Percentage of items with valid GPS coordinates (0–100). **Always present** when items were discovered; `0.0` means no GPS data, not "field missing".
+- `duplicates_detected`: Count of duplicate items detected via content hash. **Always present** when items were discovered; `0` means no duplicates found. *Note:* the engine reports duplicates but does not currently remove them from the render — the field name reflects detection, not removal.
 
 ### `estimate`
 
