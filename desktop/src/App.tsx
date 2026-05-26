@@ -334,9 +334,10 @@ function App() {
 
   async function runRender() {
     if (folders.length === 0 || state.running) return;
-    // Prompt for a destination if none chosen yet, so we never silently
-    // write to a temp path for a real render.
-    const destination = outputPath ?? (await pickOutput());
+    // Always confirm the destination via the save dialog — pre-filled with
+    // the last path, so it's one keypress to confirm, but rendering is heavy
+    // and the OS overwrite warning prevents silently clobbering a prior render.
+    const destination = await pickOutput();
     if (!destination) return;
     setIsRendering(true);
     await startRender(folders, destination, buildOverrides());
