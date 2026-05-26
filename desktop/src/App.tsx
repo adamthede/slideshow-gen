@@ -314,7 +314,7 @@ function App() {
   }
 
   async function runScan() {
-    if (folders.length === 0) return;
+    if (folders.length === 0 || state.running) return;
     setIsRendering(false);
     await start(folders, buildOverrides());
   }
