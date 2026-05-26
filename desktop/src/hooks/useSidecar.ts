@@ -158,10 +158,11 @@ function reduce(prev: SidecarState, msg: SidecarMessage): SidecarState {
         case "complete":
           next.complete = event;
           next.done = true;
-          // Outputs are ready now — stop showing "Rendering…" and re-enable
-          // controls immediately, rather than waiting for the later `exit`
-          // message (which still arrives and populates `exitCode`).
-          next.running = false;
+          // Deliberately leave `running` true here. The sidecar child is
+          // still alive until the later `exit` message clears the Rust-side
+          // process mutex; re-enabling controls now would let a fast re-click
+          // hit "already in progress". The UI swaps the Rendering→Complete
+          // card off `complete` instead (see `rendering` in App.tsx).
           break;
       }
       return next;

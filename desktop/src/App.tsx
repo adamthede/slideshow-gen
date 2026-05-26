@@ -345,7 +345,10 @@ function App() {
   const { discovery, estimate, complete, progress, phase, error, running } =
     state;
   const hasResults = discovery !== null || estimate !== null;
-  const rendering = running && isRendering;
+  // `complete` arrives before the process exits (which is what flips
+  // `running` off). Gate on `!complete` so the card swaps to "Render
+  // complete" immediately, while controls stay disabled until `exit`.
+  const rendering = running && isRendering && !complete;
 
   function truncateMiddle(path: string, max = 80): string {
     if (path.length <= max) return path;
