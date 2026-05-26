@@ -112,11 +112,11 @@ pub fn spawn_sidecar(app: &AppHandle, args: Vec<String>) -> Result<(), String> {
     let state = app.state::<SidecarState>();
 
     // Hold the mutex across check + spawn + set so two concurrent
-    // `start_scan` calls can't both pass the is_some() check and end up
-    // spawning multiple sidecars (TOCTOU race).
+    // `start_scan`/`start_render` calls can't both pass the is_some()
+    // check and end up spawning multiple sidecars (TOCTOU race).
     let mut guard = state.child.lock().map_err(|e| e.to_string())?;
     if guard.is_some() {
-        return Err("A scan is already running".into());
+        return Err("A scan or render is already in progress".into());
     }
 
     let sidecar = app

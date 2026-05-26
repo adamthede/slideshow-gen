@@ -53,8 +53,9 @@ const initialState: SidecarState = {
 /**
  * Subscribe to the sidecar event channel and expose typed state.
  *
- * Returns `{ state, start, reset }`. Call `start(folder)` to spawn a
- * scan against a folder; the state updates as events stream in.
+ * Returns `{ state, start, startRender, reset }`. Call `start(folders)`
+ * to spawn an estimate-only scan, or `startRender(folders, output)` to
+ * run a real render; the state updates as events stream in.
  */
 export function useSidecar() {
   const [state, setState] = useState<SidecarState>(initialState);
@@ -157,6 +158,10 @@ function reduce(prev: SidecarState, msg: SidecarMessage): SidecarState {
         case "complete":
           next.complete = event;
           next.done = true;
+          // Outputs are ready now — stop showing "Rendering…" and re-enable
+          // controls immediately, rather than waiting for the later `exit`
+          // message (which still arrives and populates `exitCode`).
+          next.running = false;
           break;
       }
       return next;
