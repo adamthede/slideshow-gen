@@ -17,8 +17,11 @@ export interface SidecarState {
   diagnostics: Array<{ source: "stderr" | "raw"; line: string }>;
   /** Most recent `phase_started` phase, or null. */
   phase: string | null;
-  /** Latest progress tick, or null. */
-  progress: { done: number; total: number; phase: string } | null;
+  /** Elapsed seconds (`t`) at which the current phase started, or null.
+   *  Used with `progress.t` to extrapolate a per-phase ETA. */
+  phaseStartedAt: number | null;
+  /** Latest progress tick, or null. `t` is elapsed seconds at the tick. */
+  progress: { done: number; total: number; phase: string; t: number } | null;
   /** Latest discovery_complete event, or null. */
   discovery: DiscoveryCompleteEvent | null;
   /** Latest estimate event, or null. */
@@ -40,6 +43,7 @@ const initialState: SidecarState = {
   events: [],
   diagnostics: [],
   phase: null,
+  phaseStartedAt: null,
   progress: null,
   discovery: null,
   estimate: null,
@@ -135,17 +139,36 @@ function reduce(prev: SidecarState, msg: SidecarMessage): SidecarState {
       switch (event.type) {
         case "phase_started":
           next.phase = event.phase;
+          // Reset the per-phase ETA clock to this phase's start time, with
+          // the same trust-boundary validation as `progress.t`: a malformed
+          // `t` must not poison the per-phase elapsed/ETA math with NaN.
+          {
+            const startedAt = Number(event.t);
+            next.phaseStartedAt = Number.isFinite(startedAt) ? startedAt : null;
+          }
           break;
         case "phase_complete":
           // Keep phase visible so the UI can show the most recent completed phase.
           break;
-        case "progress":
-          next.progress = {
-            done: event.done,
-            total: event.total,
-            phase: event.phase,
-          };
+        case "progress": {
+          // Validate the numeric fields at the IPC trust boundary: a malformed
+          // or version-mismatched payload could carry undefined/NaN, which
+          // would otherwise crash the render tree (`.toLocaleString()` on a
+          // non-number) or propagate NaN into the progress bar / timers.
+          // Drop a malformed tick rather than poison the UI — the last good
+          // progress stays on screen.
+          const done = Number(event.done);
+          const total = Number(event.total);
+          const t = Number(event.t);
+          if (
+            Number.isFinite(done) &&
+            Number.isFinite(total) &&
+            Number.isFinite(t)
+          ) {
+            next.progress = { done, total, phase: event.phase, t };
+          }
           break;
+        }
         case "discovery_complete":
           next.discovery = event;
           break;

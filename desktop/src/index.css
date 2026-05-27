@@ -3,45 +3,49 @@
 @tailwind utilities;
 
 @layer base {
+  /* Data-as-design palette (design-pass move #1): warm stone neutrals +
+     amber accent, never cool slate. Amber is the brand action color
+     (--primary), so buttons and the render pipeline read amber-in-flight.
+     Light is the alternate; dark-first is enforced in main.tsx. */
   :root {
-    --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
+    --background: 60 9% 98%;
+    --foreground: 24 10% 10%;
     --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
-    --primary: 222.2 47.4% 11.2%;
-    --primary-foreground: 210 40% 98%;
-    --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
-    --accent: 210 40% 96.1%;
-    --accent-foreground: 222.2 47.4% 11.2%;
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 222.2 84% 4.9%;
+    --card-foreground: 24 10% 10%;
+    --primary: 38 92% 50%;
+    --primary-foreground: 24 10% 10%;
+    --secondary: 30 6% 92%;
+    --secondary-foreground: 24 10% 10%;
+    --muted: 30 6% 92%;
+    --muted-foreground: 24 5% 45%;
+    --accent: 30 6% 92%;
+    --accent-foreground: 24 10% 10%;
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 60 9% 98%;
+    --border: 24 6% 88%;
+    --input: 24 6% 88%;
+    --ring: 38 92% 50%;
     --radius: 0.5rem;
   }
 
   .dark {
-    --background: 222.2 84% 4.9%;
-    --foreground: 210 40% 98%;
-    --card: 222.2 84% 4.9%;
-    --card-foreground: 210 40% 98%;
-    --primary: 210 40% 98%;
-    --primary-foreground: 222.2 47.4% 11.2%;
-    --secondary: 217.2 32.6% 17.5%;
-    --secondary-foreground: 210 40% 98%;
-    --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 20.2% 65.1%;
-    --accent: 217.2 32.6% 17.5%;
-    --accent-foreground: 210 40% 98%;
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 217.2 32.6% 17.5%;
-    --input: 217.2 32.6% 17.5%;
-    --ring: 212.7 26.8% 83.9%;
+    --background: 24 10% 10%; /* #1C1917 warm near-black */
+    --foreground: 60 9% 98%; /* #FAFAF9 */
+    --card: 20 6% 15%; /* #292524 surface */
+    --card-foreground: 60 9% 98%;
+    --primary: 38 92% 50%; /* #F59E0B amber */
+    --primary-foreground: 24 10% 10%;
+    --secondary: 20 6% 20%;
+    --secondary-foreground: 60 9% 98%;
+    --muted: 20 6% 20%;
+    --muted-foreground: 24 5% 64%; /* #A8A29E */
+    --accent: 20 6% 20%;
+    --accent-foreground: 60 9% 98%;
+    --destructive: 0 62% 45%;
+    --destructive-foreground: 60 9% 98%;
+    --border: 20 6% 22%;
+    --input: 20 6% 22%;
+    --ring: 38 92% 50%;
   }
 }
 
