@@ -3,20 +3,21 @@ import ReactDOM from "react-dom/client";
 import App from "./App";
 import "./index.css";
 
-// Sync the `dark` class on <html> with the OS color-scheme preference.
-// Done synchronously before React mounts to avoid a flash on dark systems.
-const colorScheme = window.matchMedia("(prefers-color-scheme: dark)");
-function syncTheme(isDark: boolean) {
-  document.documentElement.classList.toggle("dark", isDark);
+// Dark-first (design-pass move #1): Marquee defaults to the warm dark
+// palette. Light is the alternate, applied only when the OS *explicitly*
+// prefers light. Done synchronously before React mounts to avoid a flash.
+const lightScheme = window.matchMedia("(prefers-color-scheme: light)");
+function syncTheme(prefersLight: boolean) {
+  document.documentElement.classList.toggle("dark", !prefersLight);
 }
 const onColorSchemeChange = (e: MediaQueryListEvent) => syncTheme(e.matches);
-syncTheme(colorScheme.matches);
-colorScheme.addEventListener("change", onColorSchemeChange);
+syncTheme(lightScheme.matches);
+lightScheme.addEventListener("change", onColorSchemeChange);
 // Vite HMR re-evaluates this module on every save. Without cleanup, we
 // accumulate listeners and each OS theme change fires N times.
 if (import.meta.hot) {
   import.meta.hot.dispose(() => {
-    colorScheme.removeEventListener("change", onColorSchemeChange);
+    lightScheme.removeEventListener("change", onColorSchemeChange);
   });
 }
 

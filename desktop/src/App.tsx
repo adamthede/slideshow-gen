@@ -10,6 +10,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { RenderPipeline } from "@/components/ui/render-pipeline";
 import { useSidecar } from "@/hooks/useSidecar";
 import { deriveDefaultBaseName } from "@/lib/output-name";
 import type { SidecarEvent } from "@/lib/sidecar-events";
@@ -376,8 +377,16 @@ function App() {
     reset();
   }
 
-  const { discovery, estimate, complete, progress, phase, error, running } =
-    state;
+  const {
+    discovery,
+    estimate,
+    complete,
+    progress,
+    phase,
+    phaseStartedAt,
+    error,
+    running,
+  } = state;
   const hasResults = discovery !== null || estimate !== null;
   // `complete` arrives before the process exits (which is what flips
   // `running` off). Gate on `!complete` so the card swaps to "Render
@@ -745,33 +754,13 @@ function App() {
 
         {rendering && (
           <Card>
-            <CardHeader>
-              <CardTitle>Rendering…</CardTitle>
-              <CardDescription>
-                {phase ? `Phase: ${phase}` : "Starting render…"}
-                {progress && progress.total > 0
-                  ? ` · ${progress.done.toLocaleString()} / ${progress.total.toLocaleString()}`
-                  : ""}
-              </CardDescription>
-            </CardHeader>
-            {progress && progress.total > 0 && (
-              <CardContent>
-                <div
-                  className="h-2 w-full overflow-hidden rounded-full bg-muted"
-                  role="progressbar"
-                  aria-valuemin={0}
-                  aria-valuemax={progress.total}
-                  aria-valuenow={progress.done}
-                >
-                  <div
-                    className="h-full bg-primary transition-[width] duration-150 ease-out"
-                    style={{
-                      width: `${Math.min(100, (progress.done / progress.total) * 100)}%`,
-                    }}
-                  />
-                </div>
-              </CardContent>
-            )}
+            <CardContent className="pt-6">
+              <RenderPipeline
+                phase={phase}
+                phaseStartedAt={phaseStartedAt}
+                progress={progress}
+              />
+            </CardContent>
           </Card>
         )}
 
