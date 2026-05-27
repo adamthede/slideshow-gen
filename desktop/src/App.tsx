@@ -11,6 +11,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { useSidecar } from "@/hooks/useSidecar";
+import { deriveDefaultBaseName } from "@/lib/output-name";
 import type { SidecarEvent } from "@/lib/sidecar-events";
 import {
   DEFAULT_SETTINGS,
@@ -163,16 +164,6 @@ function settingsSummary(s: RenderSettings): string {
   return parts.join(" · ");
 }
 
-function defaultOutputName(): string {
-  // Local date, not UTC — toISOString() would stamp tomorrow's/yesterday's
-  // date for users whose timezone has rolled over relative to UTC.
-  const now = new Date();
-  const year = now.getFullYear();
-  const month = String(now.getMonth() + 1).padStart(2, "0");
-  const day = String(now.getDate()).padStart(2, "0");
-  return `slideshow-${year}-${month}-${day}.mp4`;
-}
-
 function App() {
   const { state, start, startRender, reset } = useSidecar();
   const [settings, setSettings] = useSettings();
@@ -185,6 +176,24 @@ function App() {
   // Tracks whether the in-flight (or last) run was a real render vs a
   // pre-render scan, so the UI shows the right progress/result copy.
   const [isRendering, setIsRendering] = useState(false);
+  // User-facing output name (no extension). Empty + untouched means "follow
+  // the folder-derived default"; once the user types, `nameTouched` pins
+  // their value so it stops tracking the folders.
+  const [name, setName] = useState("");
+  const [nameTouched, setNameTouched] = useState(false);
+
+  // The default base name derived from the source folders (folder name for a
+  // single folder, date-stamped otherwise). Stable per render: a single
+  // folder yields a constant string; the date case is constant within a day.
+  const derivedBaseName = deriveDefaultBaseName(folders);
+  // What we actually save as: the user's name if they typed one, else the
+  // derived default. Never empty.
+  const effectiveBaseName = name.trim() || derivedBaseName;
+
+  // Keep the field showing the folder-derived default until the user edits it.
+  useEffect(() => {
+    if (!nameTouched) setName(derivedBaseName);
+  }, [derivedBaseName, nameTouched]);
 
   function update<K extends keyof RenderSettings>(
     key: K,
@@ -320,9 +329,18 @@ function App() {
   }
 
   async function pickOutput(): Promise<string | null> {
+    // Filename comes from the name field; reuse the last-used directory (if
+    // any) so repeat renders stay put. A unique name means no overwrite
+    // prompt; reusing a name still surfaces the OS overwrite warning.
+    const fileName = `${effectiveBaseName}.mp4`;
+    let defaultPath = fileName;
+    if (outputPath) {
+      const slash = outputPath.lastIndexOf("/");
+      if (slash !== -1) defaultPath = outputPath.slice(0, slash + 1) + fileName;
+    }
     const selected = await save({
       title: "Save slideshow as",
-      defaultPath: outputPath ?? defaultOutputName(),
+      defaultPath,
       filters: [{ name: "Video", extensions: ["mp4"] }],
     });
     if (typeof selected === "string") {
@@ -353,6 +371,8 @@ function App() {
     setFolders([]);
     setOutputPath(null);
     setIsRendering(false);
+    setName("");
+    setNameTouched(false);
     reset();
   }
 
@@ -422,6 +442,29 @@ function App() {
                   {folders.length} folders
                 </span>
               )}
+            </div>
+            <div className="space-y-1.5">
+              <label
+                htmlFor="slideshow-name"
+                className="text-xs font-medium text-muted-foreground"
+              >
+                Name your slideshow
+              </label>
+              <div className="flex items-center gap-2">
+                <input
+                  id="slideshow-name"
+                  type="text"
+                  value={name}
+                  onChange={(e) => {
+                    setNameTouched(true);
+                    setName(e.target.value);
+                  }}
+                  placeholder={derivedBaseName}
+                  disabled={running}
+                  className="flex-1 rounded-md border bg-background px-3 py-2 text-sm"
+                />
+                <span className="text-sm text-muted-foreground">.mp4</span>
+              </div>
             </div>
             <div className="flex items-center gap-3 flex-wrap text-xs">
               <Button
