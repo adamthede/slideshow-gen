@@ -145,14 +145,25 @@ function reduce(prev: SidecarState, msg: SidecarMessage): SidecarState {
         case "phase_complete":
           // Keep phase visible so the UI can show the most recent completed phase.
           break;
-        case "progress":
-          next.progress = {
-            done: event.done,
-            total: event.total,
-            phase: event.phase,
-            t: event.t,
-          };
+        case "progress": {
+          // Validate the numeric fields at the IPC trust boundary: a malformed
+          // or version-mismatched payload could carry undefined/NaN, which
+          // would otherwise crash the render tree (`.toLocaleString()` on a
+          // non-number) or propagate NaN into the progress bar / timers.
+          // Drop a malformed tick rather than poison the UI — the last good
+          // progress stays on screen.
+          const done = Number(event.done);
+          const total = Number(event.total);
+          const t = Number(event.t);
+          if (
+            Number.isFinite(done) &&
+            Number.isFinite(total) &&
+            Number.isFinite(t)
+          ) {
+            next.progress = { done, total, phase: event.phase, t };
+          }
           break;
+        }
         case "discovery_complete":
           next.discovery = event;
           break;
