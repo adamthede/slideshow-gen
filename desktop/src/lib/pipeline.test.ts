@@ -4,6 +4,8 @@ import {
   phaseToStepIndex,
   computePhaseEtaSeconds,
   formatEta,
+  liveElapsedSeconds,
+  liveRemainingSeconds,
 } from "./pipeline";
 
 describe("PIPELINE_STEPS", () => {
@@ -106,5 +108,30 @@ describe("formatEta", () => {
     expect(formatEta(null)).toBeNull();
     expect(formatEta(-5)).toBeNull();
     expect(formatEta(Infinity)).toBeNull();
+  });
+});
+
+describe("liveElapsedSeconds", () => {
+  it("counts wall-clock seconds from the anchor to now", () => {
+    expect(liveElapsedSeconds(1_000_000, 1_012_500)).toBeCloseTo(12.5, 5);
+  });
+
+  it("clamps to zero when now precedes the anchor", () => {
+    expect(liveElapsedSeconds(1_000_000, 999_000)).toBe(0);
+  });
+});
+
+describe("liveRemainingSeconds", () => {
+  it("counts the captured ETA down by wall time since it was captured", () => {
+    // ETA was 100s, captured at t=1_000_000ms; 30s of wall time later → 70s
+    expect(liveRemainingSeconds(100, 1_000_000, 1_030_000)).toBeCloseTo(70, 5);
+  });
+
+  it("clamps at zero once the ETA is overrun", () => {
+    expect(liveRemainingSeconds(10, 1_000_000, 1_025_000)).toBe(0);
+  });
+
+  it("returns null when there is no ETA", () => {
+    expect(liveRemainingSeconds(null, 1_000_000, 1_030_000)).toBeNull();
   });
 });

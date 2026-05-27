@@ -21,7 +21,14 @@ design moves land here rather than as later polish:
 - Warm stone/amber design tokens (light + dark), dark-first default.
 - A `RenderPipeline` component: 4-segment phase indicator, per-phase progress bar,
   per-phase ETA, elapsed time. Active segment amber; done/pending muted.
-- Pure phase-mapping + ETA logic extracted to `lib/pipeline.ts`, unit-tested (vitest).
+- **Live timers (added after QA feedback):** a count-up elapsed clock and a per-phase
+  count-down of remaining time, both ticking every second via a `useSecondTicker` hook.
+  The elapsed anchor is re-aligned to the engine's reported time on each progress tick,
+  and the countdown re-seeds from the per-phase ETA each tick (clamped at 0:00). Gives
+  the user a live read on progress beyond the bar + image count. Whole-render ETA is
+  deferred — it needs render-time calibration (E0.S3); this countdown is per-phase only.
+- Pure phase-mapping + ETA + live-timer math extracted to `lib/pipeline.ts`, unit-tested
+  (vitest, 19 cases).
 - Hook captures event timestamps so per-phase ETA can be computed.
 
 ### Out of scope (deferred)

@@ -1,9 +1,11 @@
+import { useEffect, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 import {
   PIPELINE_STEPS,
   phaseToStepIndex,
   computePhaseEtaSeconds,
-  formatEta,
+  liveElapsedSeconds,
+  liveRemainingSeconds,
 } from "@/lib/pipeline";
 
 export interface RenderPipelineProps {
@@ -15,7 +17,7 @@ export interface RenderPipelineProps {
   progress: { done: number; total: number; phase: string; t: number } | null;
 }
 
-/** mm:ss clock for cumulative elapsed time. */
+/** mm:ss clock (m can exceed 59 for long renders). */
 function formatClock(seconds: number): string {
   const s = Math.max(0, Math.round(seconds));
   const m = Math.floor(s / 60);
@@ -23,13 +25,29 @@ function formatClock(seconds: number): string {
   return `${m}:${rem.toString().padStart(2, "0")}`;
 }
 
+/** Re-renders every second while `active`, returning the current epoch ms.
+ *  Clears its interval on unmount / when `active` goes false (no leaked timer). */
+function useSecondTicker(active: boolean): number {
+  const [nowMs, setNowMs] = useState(() => Date.now());
+  useEffect(() => {
+    if (!active) return;
+    setNowMs(Date.now());
+    const id = setInterval(() => setNowMs(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, [active]);
+  return nowMs;
+}
+
 /**
  * The render progress pipeline (design-pass move #5): the three-phase
  * FFmpeg pipeline rendered as a horizontal sequence — Discovery → Clips →
  * Batching → Composite. The active step fills amber as it runs; completed
  * steps are muted-amber and full; pending steps are an empty stone track.
- * Per-phase ETA and cumulative elapsed time sit beneath. Deliberately not a
- * generic progress bar — this is the strongest data-as-design surface.
+ *
+ * Beneath it sit two live timers that tick every second: a count-up elapsed
+ * clock (re-aligned to the engine's reported time on each progress tick) and a
+ * per-phase count-down of estimated time remaining. Deliberately not a generic
+ * progress bar — this is the strongest data-as-design surface.
  */
 export function RenderPipeline({
   phase,
@@ -62,8 +80,36 @@ export function RenderPipeline({
           phaseElapsedS,
         })
       : null;
-  const eta = formatEta(etaSeconds);
-  const elapsed = progress != null ? formatClock(progress.t) : null;
+
+  // Live timers. The ticker drives a re-render every second; the anchors below
+  // are re-seeded from the engine on each progress tick so the numbers stay
+  // accurate while ticking smoothly between ticks.
+  const nowMs = useSecondTicker(true);
+
+  // Wall-clock instant corresponding to engine elapsed t=0, re-aligned to the
+  // engine's reported elapsed on each tick.
+  const startMsRef = useRef<number>(Date.now());
+  useEffect(() => {
+    if (progress != null) {
+      startMsRef.current = Date.now() - progress.t * 1000;
+    }
+  }, [progress]);
+
+  // The per-phase ETA and the wall-clock time it was computed, so the
+  // countdown ticks down between progress ticks and re-seeds on each new one.
+  const etaRef = useRef<number | null>(null);
+  const etaAtMsRef = useRef<number>(Date.now());
+  useEffect(() => {
+    etaRef.current = etaSeconds;
+    etaAtMsRef.current = Date.now();
+  }, [etaSeconds]);
+
+  const liveElapsed = liveElapsedSeconds(startMsRef.current, nowMs);
+  const liveRemaining = liveRemainingSeconds(
+    etaRef.current,
+    etaAtMsRef.current,
+    nowMs,
+  );
 
   const activeLabel =
     activeStep != null ? PIPELINE_STEPS[activeStep].label : null;
@@ -74,11 +120,10 @@ export function RenderPipeline({
         <span className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
           Rendering
         </span>
-        {elapsed != null && (
-          <span className="font-mono text-xs tabular-nums text-muted-foreground">
-            {elapsed} elapsed
-          </span>
-        )}
+        <span className="font-mono text-sm tabular-nums text-foreground">
+          {formatClock(liveElapsed)}
+          <span className="ml-1 text-xs text-muted-foreground">elapsed</span>
+        </span>
       </div>
 
       <div className="grid grid-cols-4 gap-2.5">
@@ -141,9 +186,10 @@ export function RenderPipeline({
             </span>
           ) : null}
         </span>
-        {eta != null && (
+        {liveRemaining != null && (
           <span className="font-mono tabular-nums text-muted-foreground">
-            {eta} left
+            {formatClock(liveRemaining)}
+            <span className="ml-1 text-xs">left in phase</span>
           </span>
         )}
       </div>

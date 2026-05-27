@@ -87,3 +87,29 @@ export function formatEta(seconds: number | null): string | null {
   const remM = m % 60;
   return remM === 0 ? `~${h}h` : `~${h}h ${remM}m`;
 }
+
+/**
+ * Live elapsed seconds from a wall-clock anchor (ms) to `now` (ms), clamped
+ * to >= 0. The anchor is re-aligned to the engine's clock on each progress
+ * tick, so this stays accurate while ticking smoothly between ticks.
+ */
+export function liveElapsedSeconds(anchorMs: number, nowMs: number): number {
+  return Math.max(0, (nowMs - anchorMs) / 1000);
+}
+
+/**
+ * Live per-phase remaining seconds: the ETA captured at `capturedAtMs`,
+ * counted down by the wall time elapsed to `nowMs`. Returns `null` when there
+ * is no ETA yet, and clamps at 0 once the estimate is overrun (so the
+ * countdown rests at 0:00 rather than going negative while a slow phase
+ * finishes).
+ */
+export function liveRemainingSeconds(
+  etaSeconds: number | null,
+  capturedAtMs: number,
+  nowMs: number,
+): number | null {
+  if (etaSeconds == null) return null;
+  const sinceCapture = (nowMs - capturedAtMs) / 1000;
+  return Math.max(0, etaSeconds - sinceCapture);
+}
