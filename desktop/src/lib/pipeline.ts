@@ -109,7 +109,12 @@ export function liveRemainingSeconds(
   capturedAtMs: number,
   nowMs: number,
 ): number | null {
-  if (etaSeconds == null) return null;
-  const sinceCapture = (nowMs - capturedAtMs) / 1000;
+  if (etaSeconds == null || !Number.isFinite(etaSeconds) || etaSeconds < 0) {
+    return null;
+  }
+  // Clamp elapsed-since-capture to >= 0 so a backward clock adjustment (or a
+  // non-monotonic Date.now()) can never make the countdown jump *up* past the
+  // captured estimate — matching liveElapsedSeconds' clamp.
+  const sinceCapture = Math.max(0, (nowMs - capturedAtMs) / 1000);
   return Math.max(0, etaSeconds - sinceCapture);
 }

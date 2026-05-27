@@ -10,8 +10,9 @@
 E4.S2 builds the render progress UI. Per `docs/design-pass.md`, two "day one of Epic 4"
 design moves land here rather than as later polish:
 
-- **Move #5 — Phase pipeline progress.** The three-phase FFmpeg pipeline rendered as a
-  horizontal pipeline (discovery → clips → batching → composite), amber for in-flight,
+- **Move #5 — Phase pipeline progress.** The render rendered as a four-step horizontal
+  pipeline (discovery → clips → batching → composite — discovery plus the three FFmpeg
+  phases), amber for in-flight,
   muted stone for pending/done, elapsed + ETA under the active segment. The strongest
   data-as-design surface in the app — explicitly *not* a generic progress bar.
 - **Move #1 — Dark-first palette swap.** Replace cool slate tokens with warm

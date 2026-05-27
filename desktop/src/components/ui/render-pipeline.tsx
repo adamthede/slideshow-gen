@@ -19,6 +19,9 @@ export interface RenderPipelineProps {
 
 /** mm:ss clock (m can exceed 59 for long renders). */
 function formatClock(seconds: number): string {
+  // Guard against a non-finite value (e.g. a malformed IPC `t`) flowing
+  // through the timer math and rendering as "NaN:NaN".
+  if (!Number.isFinite(seconds)) return "--:--";
   const s = Math.max(0, Math.round(seconds));
   const m = Math.floor(s / 60);
   const rem = s % 60;
@@ -39,9 +42,10 @@ function useSecondTicker(active: boolean): number {
 }
 
 /**
- * The render progress pipeline (design-pass move #5): the three-phase
- * FFmpeg pipeline rendered as a horizontal sequence — Discovery → Clips →
- * Batching → Composite. The active step fills amber as it runs; completed
+ * The render progress pipeline (design-pass move #5): the render rendered as
+ * a four-step horizontal sequence — Discovery → Clips → Batching → Composite
+ * (discovery plus the three FFmpeg phases). The active step fills amber as it
+ * runs; completed
  * steps are muted-amber and full; pending steps are an empty stone track.
  *
  * Beneath it sit two live timers that tick every second: a count-up elapsed
@@ -73,7 +77,10 @@ export function RenderPipeline({
       ? progress.t - phaseStartedAt
       : null;
   const etaSeconds =
-    progress != null && progressStep === activeStep && phaseElapsedS != null
+    progress != null &&
+    activeStep != null &&
+    progressStep === activeStep &&
+    phaseElapsedS != null
       ? computePhaseEtaSeconds({
           done: progress.done,
           total: progress.total,
@@ -178,6 +185,7 @@ export function RenderPipeline({
           {activeLabel ?? "Starting render…"}
           {progress != null &&
           progress.total > 0 &&
+          activeStep != null &&
           progressStep === activeStep ? (
             <span className="text-muted-foreground">
               {" · "}

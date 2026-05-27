@@ -134,4 +134,14 @@ describe("liveRemainingSeconds", () => {
   it("returns null when there is no ETA", () => {
     expect(liveRemainingSeconds(null, 1_000_000, 1_030_000)).toBeNull();
   });
+
+  it("never increases above the captured ETA on a backward clock step", () => {
+    // nowMs < capturedAtMs (clock adjusted backward) must not add time.
+    expect(liveRemainingSeconds(100, 1_030_000, 1_000_000)).toBe(100);
+  });
+
+  it("returns null for a non-finite or negative ETA", () => {
+    expect(liveRemainingSeconds(Infinity, 1_000_000, 1_030_000)).toBeNull();
+    expect(liveRemainingSeconds(-5, 1_000_000, 1_030_000)).toBeNull();
+  });
 });
