@@ -10,22 +10,24 @@
 | 2 | 2026-05-25 19:05 | 2 | 1 | 0 | 1 | d3169e7 | 50% |
 | 3 | 2026-05-25 19:10 | 1 | 1 | 0 | 0 | c8988d6 | 100% |
 | 4 | 2026-05-25 19:16 | 2 | 1 | 1 | 0 | 0bf1385 | 50% |
+| 5 | 2026-05-26 | 4 | 2 | 0 | 2 | 292ecda | 50% |
 
 ## Reviewer Effectiveness
 | Reviewer | Total Found | T1 (Must) | T2 (Should) | T3 (Consider) | T4 (Dismiss) | Actioned % | Signal:Noise |
 |----------|------------|-----------|-------------|---------------|-------------|-----------|-------------|
-| Copilot | 3 | 0 | 3 | 0 | 0 | 100% | 3:0 |
-| Gemini | 7 | 0 | 5 | 1 | 1 | 71% | 5:2 |
+| Copilot | 6 | 0 | 4 | 1 | 1 | 67% | 4:2 |
+| Gemini | 8 | 0 | 5 | 2 | 1 | 63% | 5:3 |
 
 ## Issue Categories (Cumulative)
 | Category | T1 | T2 | T3 | T4 | Total | % of All |
 |----------|----|----|----|----|-------|----------|
-| data-integrity | 0 | 6 | 1 | 0 | 7 | 70% |
-| documentation | 0 | 1 | 0 | 0 | 1 | 10% |
-| error-handling | 0 | 1 | 0 | 0 | 1 | 10% |
-| style | 0 | 0 | 0 | 1 | 1 | 10% |
+| data-integrity | 0 | 6 | 1 | 0 | 7 | 50% |
+| documentation | 0 | 3 | 0 | 0 | 3 | 21% |
+| error-handling | 0 | 1 | 0 | 0 | 1 | 7% |
+| style | 0 | 0 | 1 | 1 | 2 | 14% |
+| api-contract | 0 | 0 | 1 | 0 | 1 | 7% |
 
-**Status:** MAX CYCLES REACHED
+**Status:** READY TO MERGE
 
 ## Cycle 1 — 2026-05-25 19:00
 
@@ -152,3 +154,50 @@ Message: fix: Address PR review cycle 3 — render-complete race condition
 ### Commit
 SHA: 0bf1385
 Message: fix: Address PR review cycle 4 — always confirm render destination
+
+## Cycle 5 — 2026-05-26
+
+### Pre-Review Snapshot
+- **Files changed:** 8 (722+ / 94-) — cumulative after all prior cycle fixes
+- **Test:Code ratio:** 0:5 (no dedicated test files; Rust unit tests inline in `lib.rs`)
+- **CI status:** No CI configured on branch
+- **Linter offenses:** N/A (non-Ruby)
+
+### Actioned (2)
+#### T2-SHOULD: Story doc contradicts itself on Reveal-in-Finder scope
+- **File:** `_bmad-output/implementation-artifacts/4-1-render-kickoff.md:136`
+- **Category:** `documentation`
+- **Reviewer:** Copilot (`copilot-pull-request-reviewer`)
+- **Comment:** "This story doc contradicts itself about Reveal-in-Finder: the 'Scope held' bullet says Reveal-in-Finder is out of scope... but the change log below states a 'Reveal in Finder' button was pulled forward..."
+- **Disposition:** FIXED — updated "Scope held" note to read "One E4.S5 item pulled forward: 'Reveal in Finder' button..." and updated result card description to include the Reveal button.
+- **Thread ID:** PRRT_kwDOR-Xvl86EqWGE
+
+#### T2-SHOULD: File List omits opener capability added for Reveal button
+- **File:** `_bmad-output/implementation-artifacts/4-1-render-kickoff.md:142`
+- **Category:** `documentation`
+- **Reviewer:** Copilot (`copilot-pull-request-reviewer`)
+- **Comment:** "The 'File List' section omits the capability change for the Reveal button. `desktop/src-tauri/capabilities/default.json` was updated to add `opener:allow-reveal-item-in-dir`..."
+- **Disposition:** FIXED — updated File List entry to read "added `dialog:allow-save` and `opener:allow-reveal-item-in-dir`".
+- **Thread ID:** PRRT_kwDOR-Xvl86EqWGN
+
+### Skipped (2)
+#### T3-CONSIDER: Improve pickOutput to keep prior directory with fresh filename
+- **File:** `desktop/src/App.tsx:327`
+- **Category:** `style`
+- **Reviewer:** Gemini (`gemini-code-assist`)
+- **Disposition:** SKIPPED — Cycle 4 deliberately chose `defaultPath: outputPath ?? defaultOutputName()` to surface the OS overwrite warning as a safety guard on repeat renders. Gemini's suggestion (keep dir, fresh name) would remove that protection. Valid trade-off but conflicts with an intentional design decision; deferring to the designer.
+- **Thread ID:** PRRT_kwDOR-Xvl86EqUiq
+
+#### T3-CONSIDER: Rename ScanSettings to something render-agnostic
+- **File:** `desktop/src-tauri/src/lib.rs:153`
+- **Category:** `api-contract`
+- **Reviewer:** Copilot (`copilot-pull-request-reviewer`)
+- **Disposition:** SKIPPED — Pure naming refactor, no correctness impact. `ScanSettings` is an internal struct; renaming across call sites adds churn for marginal clarity gain. Could be addressed in a follow-up E4.S2+ story when the settings API stabilizes.
+- **Thread ID:** PRRT_kwDOR-Xvl86EqWF0
+
+### Recurrence Patterns
+No recurring patterns detected this cycle.
+
+### Commit
+SHA: 292ecda
+Message: fix: Address PR review cycle 5 — correct story doc scope + file list
