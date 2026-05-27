@@ -133,13 +133,13 @@ claude-haiku-4-5-20251001 (Claude Code)
 - **Key design decision:** output destination is a dedicated `output: String` parameter on `start_render` and transient React state, NOT a persisted setting. Keeps "optional overrides" (settings) cleanly separate from "required render input" (output) and avoids stale-path footguns.
 - **Refactor for testability:** extracted pure `build_args()` + `append_settings()` in `lib.rs`, enabling 5 new Rust unit tests that lock the estimate-vs-render arg differences (no `--estimate-only`/no `--workers` on renders; real output + dirs forwarded; settings appended; audio-volume dropped without a track).
 - Added missing `dialog:allow-save` capability — the save picker would have failed at runtime without it (only `dialog:allow-open` was granted).
-- Scope held: no progress-phase UI (E4.S2), no cancel (E4.S3), no warning panel (E4.S4), no in-app preview/Reveal-in-Finder (E4.S5). Result card shows output path + size text only.
+- Scope held: no progress-phase UI (E4.S2), no cancel (E4.S3), no warning panel (E4.S4). **One E4.S5 item pulled forward:** "Reveal in Finder" button on each completed output (`revealItemInDir` via `@tauri-apps/plugin-opener` + `opener:allow-reveal-item-in-dir` capability). Result card shows output path + size text + Reveal button.
 - Verification: pytest 10/10, cargo 21/21, tsc clean, vite build clean, real-render smoke through the frozen sidecar binary. Full GUI E2E (`npm run tauri dev`) left for manual QA — not runnable headless.
 
 ### File List
 
 - `desktop/src-tauri/src/lib.rs` (modified) — extracted `append_settings()` + `build_args()`; added `start_render` command; registered it; added `#[cfg(test)]` arg-builder tests.
-- `desktop/src-tauri/capabilities/default.json` (modified) — added `dialog:allow-save`.
+- `desktop/src-tauri/capabilities/default.json` (modified) — added `dialog:allow-save` and `opener:allow-reveal-item-in-dir`.
 - `desktop/src/hooks/useSidecar.ts` (modified) — `complete` event captured in state; added `startRender()`.
 - `desktop/src/App.tsx` (modified) — transient `outputPath`/`isRendering` state; `buildOverrides()`/`runRender()`/`pickOutput()`; Render button + output picker UI; Rendering + Render-complete cards.
 
