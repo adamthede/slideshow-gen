@@ -4,21 +4,21 @@
 ## Active PRs
 | PR | Title | Cycles | Status | Last Cycle | Actioned | Ratio |
 |----|-------|--------|--------|------------|----------|-------|
-| #4 | Epic 4.S2: Render progress pipeline + dark-first palette | 1 | IN PROGRESS (cycle 2 pending — paused for live QA render) | 2026-05-27 | 6 | 86% |
+| #4 | Epic 4.S2: Render progress pipeline + dark-first palette | 4 | MAX CYCLES REACHED | 2026-05-27 | 14 | 78% |
 
 ## Cumulative Bot Effectiveness
 | Reviewer | Total Comments | T1 | T2 | T3 | T4 | Actioned % | Signal:Noise |
 |----------|---------------|----|----|----|----|-----------|-------------|
-| Copilot | 45 | 2 | 39 | 2 | 2 | 91% | 41:4 |
-| Gemini | 31 | 0 | 14 | 6 | 11 | 45% | 14:17 |
+| Copilot | 50 | 2 | 44 | 2 | 2 | 92% | 46:4 |
+| Gemini | 37 | 0 | 17 | 8 | 12 | 46% | 17:20 |
 
 ## Top Issue Categories (Across All PRs)
 | Category | T1+T2 (Actioned) | T3+T4 (Noise) | Total | Actioned % |
 |----------|-------------------|----------------|-------|-----------|
-| data-integrity | 17 | 3 | 20 | 85% |
+| data-integrity | 20 | 5 | 25 | 80% |
+| documentation | 17 | 1 | 18 | 94% |
 | error-handling | 14 | 3 | 17 | 82% |
-| documentation | 12 | 1 | 13 | 92% |
-| style | 6 | 10 | 16 | 38% |
+| style | 6 | 11 | 17 | 35% |
 | api-contract | 3 | 1 | 4 | 75% |
 | performance | 1 | 2 | 3 | 33% |
 | test-coverage | 2 | 0 | 2 | 100% |
