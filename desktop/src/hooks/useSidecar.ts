@@ -139,8 +139,13 @@ function reduce(prev: SidecarState, msg: SidecarMessage): SidecarState {
       switch (event.type) {
         case "phase_started":
           next.phase = event.phase;
-          // Reset the per-phase ETA clock to this phase's start time.
-          next.phaseStartedAt = event.t;
+          // Reset the per-phase ETA clock to this phase's start time, with
+          // the same trust-boundary validation as `progress.t`: a malformed
+          // `t` must not poison the per-phase elapsed/ETA math with NaN.
+          {
+            const startedAt = Number(event.t);
+            next.phaseStartedAt = Number.isFinite(startedAt) ? startedAt : null;
+          }
           break;
         case "phase_complete":
           // Keep phase visible so the UI can show the most recent completed phase.

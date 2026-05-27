@@ -42,7 +42,7 @@ function useSecondTicker(active: boolean): number {
 }
 
 /**
- * The render progress pipeline (design-pass move #5): the render rendered as
+ * The render progress pipeline (design-pass move #5): the render shown as
  * a four-step horizontal sequence — Discovery → Clips → Batching → Composite
  * (discovery plus the three FFmpeg phases). The active step fills amber as it
  * runs; completed

@@ -29,7 +29,7 @@ design moves land here rather than as later polish:
   the user a live read on progress beyond the bar + image count. Whole-render ETA is
   deferred — it needs render-time calibration (E0.S3); this countdown is per-phase only.
 - Pure phase-mapping + ETA + live-timer math extracted to `lib/pipeline.ts`, unit-tested
-  (vitest, 19 cases).
+  (vitest, 21 cases).
 - Hook captures event timestamps so per-phase ETA can be computed.
 
 ### Out of scope (deferred)
@@ -64,7 +64,7 @@ design moves land here rather than as later polish:
 - `desktop/src/index.css` (modified) — warm stone/amber tokens, amber as `--primary` (move #1)
 - `desktop/src/main.tsx` (modified) — dark-first default; light only on explicit OS preference (move #1)
 - `desktop/src/lib/pipeline.ts` (new) — pure `PIPELINE_STEPS`, `phaseToStepIndex`, `computePhaseEtaSeconds`, `formatEta`
-- `desktop/src/lib/pipeline.test.ts` (new) — 14 vitest unit tests for the above
+- `desktop/src/lib/pipeline.test.ts` (new) — 21 vitest unit tests for the above
 - `desktop/src/components/ui/render-pipeline.tsx` (new) — 4-segment phase pipeline (move #5)
 - `desktop/src/hooks/useSidecar.ts` (modified) — capture `phaseStartedAt` + progress `t` for per-phase ETA
 - `desktop/src/App.tsx` (modified) — replaced generic Rendering card with `<RenderPipeline>`
@@ -72,7 +72,7 @@ design moves land here rather than as later polish:
 - `desktop/vitest.config.ts` (new) — vitest config (node env, `@` alias)
 
 ## Verification
-- `npm test` — 14/14 vitest green (phase mapping, ETA extrapolation, edge cases, formatting)
+- `npm test` — 21/21 vitest green (phase mapping, ETA extrapolation, live-timer math, edge cases, formatting)
 - `npx tsc --noEmit` (via `npm run build`) — clean
 - `npm run build` (tsc + vite) — clean, 49 modules
 - No Rust changes — cargo unaffected by construction
@@ -82,5 +82,6 @@ design moves land here rather than as later polish:
 
 ## TDD note
 Pure logic (`pipeline.ts`) was built test-first: wrote `pipeline.test.ts`, confirmed red
-(10 failing against stubs), implemented, confirmed green (14/14). The component and palette
-are presentational and verified via tsc + build + manual QA, matching the S1 testing split.
+(10 failing against stubs), implemented, confirmed green (14/14 at the time; the suite has
+since grown to 21/21 via review-cycle hardening). The component and palette are
+presentational and verified via tsc + build + manual QA, matching the S1 testing split.
