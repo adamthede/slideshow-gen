@@ -343,6 +343,19 @@ function App() {
     await startRender(folders, destination, buildOverrides());
   }
 
+  // Full reset back to the empty drop-zone state for a fresh slideshow:
+  // clears folders, output destination, and all sidecar results. Settings
+  // are intentionally preserved (they persist across launches and are the
+  // user's standing preferences — the settings drawer has its own
+  // "Reset to defaults"). No-op mid-render so we never reset under a live job.
+  function resetAll() {
+    if (state.running) return;
+    setFolders([]);
+    setOutputPath(null);
+    setIsRendering(false);
+    reset();
+  }
+
   const { discovery, estimate, complete, progress, phase, error, running } =
     state;
   const hasResults = discovery !== null || estimate !== null;
@@ -754,6 +767,22 @@ function App() {
                   </div>
                 </div>
               ))}
+              <div className="flex items-center gap-3 flex-wrap pt-2">
+                <Button onClick={runRender} disabled={running}>
+                  Render again
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={resetAll}
+                  disabled={running}
+                >
+                  New slideshow
+                </Button>
+                <span className="text-xs text-muted-foreground">
+                  Render again uses the same folders &amp; settings · New
+                  slideshow clears everything.
+                </span>
+              </div>
             </CardContent>
           </Card>
         )}
@@ -764,6 +793,11 @@ function App() {
               <CardTitle className="text-destructive">Error</CardTitle>
               <CardDescription className="font-mono">{error}</CardDescription>
             </CardHeader>
+            <CardContent>
+              <Button variant="outline" onClick={resetAll} disabled={running}>
+                New slideshow
+              </Button>
+            </CardContent>
           </Card>
         )}
 
