@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/card";
 import { RenderPipeline } from "@/components/ui/render-pipeline";
 import { useSidecar } from "@/hooks/useSidecar";
+import { deriveDefaultBaseName } from "@/lib/output-name";
 import type { SidecarEvent } from "@/lib/sidecar-events";
 import {
   DEFAULT_SETTINGS,
@@ -164,16 +165,6 @@ function settingsSummary(s: RenderSettings): string {
   return parts.join(" · ");
 }
 
-function defaultOutputName(): string {
-  // Local date, not UTC — toISOString() would stamp tomorrow's/yesterday's
-  // date for users whose timezone has rolled over relative to UTC.
-  const now = new Date();
-  const year = now.getFullYear();
-  const month = String(now.getMonth() + 1).padStart(2, "0");
-  const day = String(now.getDate()).padStart(2, "0");
-  return `slideshow-${year}-${month}-${day}.mp4`;
-}
-
 function App() {
   const { state, start, startRender, reset } = useSidecar();
   const [settings, setSettings] = useSettings();
@@ -186,6 +177,24 @@ function App() {
   // Tracks whether the in-flight (or last) run was a real render vs a
   // pre-render scan, so the UI shows the right progress/result copy.
   const [isRendering, setIsRendering] = useState(false);
+  // User-facing output name (no extension). Empty + untouched means "follow
+  // the folder-derived default"; once the user types, `nameTouched` pins
+  // their value so it stops tracking the folders.
+  const [name, setName] = useState("");
+  const [nameTouched, setNameTouched] = useState(false);
+
+  // The default base name derived from the source folders (folder name for a
+  // single folder, date-stamped otherwise). Stable per render: a single
+  // folder yields a constant string; the date case is constant within a day.
+  const derivedBaseName = deriveDefaultBaseName(folders);
+  // What we actually save as: the user's name if they typed one, else the
+  // derived default. Never empty.
+  const effectiveBaseName = name.trim() || derivedBaseName;
+
+  // Keep the field showing the folder-derived default until the user edits it.
+  useEffect(() => {
+    if (!nameTouched) setName(derivedBaseName);
+  }, [derivedBaseName, nameTouched]);
 
   function update<K extends keyof RenderSettings>(
     key: K,
@@ -321,9 +330,18 @@ function App() {
   }
 
   async function pickOutput(): Promise<string | null> {
+    // Filename comes from the name field; reuse the last-used directory (if
+    // any) so repeat renders stay put. A unique name means no overwrite
+    // prompt; reusing a name still surfaces the OS overwrite warning.
+    const fileName = `${effectiveBaseName}.mp4`;
+    let defaultPath = fileName;
+    if (outputPath) {
+      const slash = outputPath.lastIndexOf("/");
+      if (slash !== -1) defaultPath = outputPath.slice(0, slash + 1) + fileName;
+    }
     const selected = await save({
       title: "Save slideshow as",
-      defaultPath: outputPath ?? defaultOutputName(),
+      defaultPath,
       filters: [{ name: "Video", extensions: ["mp4"] }],
     });
     if (typeof selected === "string") {
@@ -342,6 +360,21 @@ function App() {
     if (!destination) return;
     setIsRendering(true);
     await startRender(folders, destination, buildOverrides());
+  }
+
+  // Full reset back to the empty drop-zone state for a fresh slideshow:
+  // clears folders, output destination, and all sidecar results. Settings
+  // are intentionally preserved (they persist across launches and are the
+  // user's standing preferences — the settings drawer has its own
+  // "Reset to defaults"). No-op mid-render so we never reset under a live job.
+  function resetAll() {
+    if (state.running) return;
+    setFolders([]);
+    setOutputPath(null);
+    setIsRendering(false);
+    setName("");
+    setNameTouched(false);
+    reset();
   }
 
   const {
@@ -418,6 +451,29 @@ function App() {
                   {folders.length} folders
                 </span>
               )}
+            </div>
+            <div className="space-y-1.5">
+              <label
+                htmlFor="slideshow-name"
+                className="text-xs font-medium text-muted-foreground"
+              >
+                Name your slideshow
+              </label>
+              <div className="flex items-center gap-2">
+                <input
+                  id="slideshow-name"
+                  type="text"
+                  value={name}
+                  onChange={(e) => {
+                    setNameTouched(true);
+                    setName(e.target.value);
+                  }}
+                  placeholder={derivedBaseName}
+                  disabled={running}
+                  className="flex-1 rounded-md border bg-background px-3 py-2 text-sm"
+                />
+                <span className="text-sm text-muted-foreground">.mp4</span>
+              </div>
             </div>
             <div className="flex items-center gap-3 flex-wrap text-xs">
               <Button
@@ -743,6 +799,22 @@ function App() {
                   </div>
                 </div>
               ))}
+              <div className="flex items-center gap-3 flex-wrap pt-2">
+                <Button onClick={runRender} disabled={running}>
+                  Render again
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={resetAll}
+                  disabled={running}
+                >
+                  New slideshow
+                </Button>
+                <span className="text-xs text-muted-foreground">
+                  Render again uses the same folders &amp; settings · New
+                  slideshow clears everything.
+                </span>
+              </div>
             </CardContent>
           </Card>
         )}
@@ -753,6 +825,11 @@ function App() {
               <CardTitle className="text-destructive">Error</CardTitle>
               <CardDescription className="font-mono">{error}</CardDescription>
             </CardHeader>
+            <CardContent>
+              <Button variant="outline" onClick={resetAll} disabled={running}>
+                New slideshow
+              </Button>
+            </CardContent>
           </Card>
         )}
 
