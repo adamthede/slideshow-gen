@@ -17,8 +17,11 @@ export interface SidecarState {
   diagnostics: Array<{ source: "stderr" | "raw"; line: string }>;
   /** Most recent `phase_started` phase, or null. */
   phase: string | null;
-  /** Latest progress tick, or null. */
-  progress: { done: number; total: number; phase: string } | null;
+  /** Elapsed seconds (`t`) at which the current phase started, or null.
+   *  Used with `progress.t` to extrapolate a per-phase ETA. */
+  phaseStartedAt: number | null;
+  /** Latest progress tick, or null. `t` is elapsed seconds at the tick. */
+  progress: { done: number; total: number; phase: string; t: number } | null;
   /** Latest discovery_complete event, or null. */
   discovery: DiscoveryCompleteEvent | null;
   /** Latest estimate event, or null. */
@@ -40,6 +43,7 @@ const initialState: SidecarState = {
   events: [],
   diagnostics: [],
   phase: null,
+  phaseStartedAt: null,
   progress: null,
   discovery: null,
   estimate: null,
@@ -135,6 +139,8 @@ function reduce(prev: SidecarState, msg: SidecarMessage): SidecarState {
       switch (event.type) {
         case "phase_started":
           next.phase = event.phase;
+          // Reset the per-phase ETA clock to this phase's start time.
+          next.phaseStartedAt = event.t;
           break;
         case "phase_complete":
           // Keep phase visible so the UI can show the most recent completed phase.
@@ -144,6 +150,7 @@ function reduce(prev: SidecarState, msg: SidecarMessage): SidecarState {
             done: event.done,
             total: event.total,
             phase: event.phase,
+            t: event.t,
           };
           break;
         case "discovery_complete":
