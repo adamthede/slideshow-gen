@@ -93,23 +93,32 @@ export function RenderPipeline({
   // accurate while ticking smoothly between ticks.
   const nowMs = useSecondTicker(true);
 
+  // Anchors are re-seeded *synchronously during render* (not in an effect)
+  // when the tracked value changes, so the very first render after a new
+  // progress tick already uses the fresh anchor. Doing it in an effect would
+  // leave the timers a render (up to one ticker second) behind.
+
   // Wall-clock instant corresponding to engine elapsed t=0, re-aligned to the
-  // engine's reported elapsed on each tick.
+  // engine's reported elapsed whenever a new progress tick arrives.
   const startMsRef = useRef<number>(Date.now());
-  useEffect(() => {
+  const prevProgressRef = useRef<typeof progress>(null);
+  if (progress !== prevProgressRef.current) {
+    prevProgressRef.current = progress;
     if (progress != null) {
       startMsRef.current = Date.now() - progress.t * 1000;
     }
-  }, [progress]);
+  }
 
   // The per-phase ETA and the wall-clock time it was computed, so the
   // countdown ticks down between progress ticks and re-seeds on each new one.
   const etaRef = useRef<number | null>(null);
   const etaAtMsRef = useRef<number>(Date.now());
-  useEffect(() => {
+  const prevEtaSecondsRef = useRef<number | null>(null);
+  if (etaSeconds !== prevEtaSecondsRef.current) {
+    prevEtaSecondsRef.current = etaSeconds;
     etaRef.current = etaSeconds;
     etaAtMsRef.current = Date.now();
-  }, [etaSeconds]);
+  }
 
   const liveElapsed = liveElapsedSeconds(startMsRef.current, nowMs);
   const liveRemaining = liveRemainingSeconds(
