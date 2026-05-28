@@ -5,20 +5,20 @@
 | PR | Title | Cycles | Status | Last Cycle | Actioned | Ratio |
 |----|-------|--------|--------|------------|----------|-------|
 | #6 | Epic 4.S3: Render cancellation | 2 | READY TO MERGE | 2026-05-28 | 4 | 31% |
-| #7 | Epic 5.S1 — signed + notarized release pipeline | 1 | IN PROGRESS | 2026-05-28 22:37 | 3 | 50% |
+| #7 | Epic 5.S1 — signed + notarized release pipeline | 2 | READY TO MERGE | 2026-05-28 22:50 | 3 | 50% (c1) / 0% (c2) |
 
 ## Cumulative Bot Effectiveness
 | Reviewer | Total Comments | T1 | T2 | T3 | T4 | Actioned % | Signal:Noise |
 |----------|---------------|----|----|----|----|-----------|-------------|
 | Copilot | 59 | 6 | 45 | 3 | 5 | 86% | 51:8 |
-| Gemini | 47 | 0 | 19 | 8 | 20 | 40% | 19:28 |
+| Gemini | 50 | 0 | 19 | 9 | 22 | 38% | 19:31 |
 
 ## Top Issue Categories (Across All PRs)
 | Category | T1+T2 (Actioned) | T3+T4 (Noise) | Total | Actioned % |
 |----------|-------------------|----------------|-------|-----------|
 | data-integrity | 23 | 5 | 28 | 82% |
 | error-handling | 17 | 3 | 20 | 85% |
-| documentation | 17 | 3 | 20 | 85% |
+| documentation | 17 | 5 | 22 | 77% |
 | style | 6 | 21 | 27 | 22% |
 | api-contract | 4 | 1 | 5 | 80% |
 | performance | 1 | 2 | 3 | 33% |
