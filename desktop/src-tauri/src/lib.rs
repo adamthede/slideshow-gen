@@ -1,7 +1,7 @@
 mod sidecar;
 
 use serde::Deserialize;
-use sidecar::{spawn_sidecar, SidecarState};
+use sidecar::{cancel_sidecar, spawn_sidecar, SidecarState};
 
 /// Render settings the frontend can override. Each field is optional —
 /// `None` means "let the CLI use its default", so the Rust shell never
@@ -27,6 +27,9 @@ struct ScanSettings {
     no_overlays: Option<bool>,
     no_date: Option<bool>,
     no_location: Option<bool>,
+    /// Keep the render's temp directory instead of deleting it (debugging).
+    /// Maps to `--keep-temp`; also honored on cancellation.
+    keep_temp: Option<bool>,
 }
 
 /// Append the `--flag value` pairs for any overridden render settings.
@@ -79,6 +82,9 @@ fn append_settings(args: &mut Vec<String>, settings: Option<ScanSettings>) {
     }
     if s.no_location.unwrap_or(false) {
         args.push("--no-location".into());
+    }
+    if s.keep_temp.unwrap_or(false) {
+        args.push("--keep-temp".into());
     }
 }
 
@@ -162,6 +168,16 @@ async fn start_render(
     spawn_sidecar(&app, args)
 }
 
+/// Cancel the in-flight render. Sends SIGTERM to the sidecar so the engine can
+/// reap its FFmpeg children and clean up its temp dir before exiting; a SIGKILL
+/// escalation fires only if it doesn't exit within the grace period. The
+/// frontend learns the outcome from the `cancelled` event and the `exit`
+/// message (which re-enables controls), not from this call returning.
+#[tauri::command]
+async fn cancel_render(app: tauri::AppHandle) -> Result<(), String> {
+    cancel_sidecar(&app)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -169,7 +185,7 @@ pub fn run() {
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
         .manage(SidecarState::default())
-        .invoke_handler(tauri::generate_handler![start_scan, start_render])
+        .invoke_handler(tauri::generate_handler![start_scan, start_render, cancel_render])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
@@ -242,6 +258,28 @@ mod tests {
         assert!(has_flag(&args, "--no-overlays"));
         assert_eq!(value_after(&args, "--audio-track"), Some("/music/track.mp3"));
         assert_eq!(value_after(&args, "--audio-volume"), Some("0.5"));
+    }
+
+    #[test]
+    fn keep_temp_flag_appended_when_set() {
+        let settings = ScanSettings {
+            keep_temp: Some(true),
+            ..Default::default()
+        };
+        let args = build_args(&folders(), "/out/slideshow.mp4", false, Some(settings));
+        assert!(has_flag(&args, "--keep-temp"));
+    }
+
+    #[test]
+    fn keep_temp_flag_absent_by_default() {
+        let args = build_args(&folders(), "/out/slideshow.mp4", false, None);
+        assert!(!has_flag(&args, "--keep-temp"));
+        let settings = ScanSettings {
+            keep_temp: Some(false),
+            ..Default::default()
+        };
+        let args = build_args(&folders(), "/out/slideshow.mp4", false, Some(settings));
+        assert!(!has_flag(&args, "--keep-temp"));
     }
 
     #[test]

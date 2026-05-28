@@ -3,6 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import {
   SIDECAR_EVENT_CHANNEL,
+  type CancelledEvent,
   type CompleteEvent,
   type DiscoveryCompleteEvent,
   type EstimateEvent,
@@ -29,6 +30,12 @@ export interface SidecarState {
   /** The `complete` event from a finished render, or null. Carries the
    *  written output file(s). Only emitted by real renders, not scans. */
   complete: CompleteEvent | null;
+  /** The `cancelled` event from a cancelled render, or null. Primary,
+   *  unambiguous signal that the user's cancel took effect. */
+  cancelled: CancelledEvent | null;
+  /** True from the moment a cancel is requested until the process exits.
+   *  Drives the "Cancelling…" affordance and keeps the Cancel button disabled. */
+  cancelling: boolean;
   /** Latest error message, or null. */
   error: string | null;
   /** True after `complete` event OR after process exit. */
@@ -48,6 +55,8 @@ const initialState: SidecarState = {
   discovery: null,
   estimate: null,
   complete: null,
+  cancelled: null,
+  cancelling: false,
   error: null,
   done: false,
   running: false,
@@ -123,9 +132,28 @@ export function useSidecar() {
     [],
   );
 
+  const cancelRender = useCallback(async () => {
+    // Optimistically flag the in-flight cancel so the UI can disable the
+    // button and show "Cancelling…". The authoritative end-state still comes
+    // from the `cancelled` event + process `exit` (see the reducer), never
+    // from this call resolving.
+    setState((prev) => (prev.running ? { ...prev, cancelling: true } : prev));
+    try {
+      await invoke("cancel_render");
+    } catch (err) {
+      // Most likely "No render is running" — a benign race where the engine
+      // exited between the click and the IPC dispatch. The `exit` message
+      // (already in flight or already processed) reconciles the rest, so just
+      // clear the optimistic flag. Surfacing this as state.error would pop
+      // the red error card for a harmless race.
+      console.warn("[marquee] cancel_render failed (likely a benign race):", err);
+      setState((prev) => ({ ...prev, cancelling: false }));
+    }
+  }, []);
+
   const reset = useCallback(() => setState(initialState), []);
 
-  return { state, start, startRender, reset };
+  return { state, start, startRender, cancelRender, reset };
 }
 
 function reduce(prev: SidecarState, msg: SidecarMessage): SidecarState {
@@ -187,6 +215,13 @@ function reduce(prev: SidecarState, msg: SidecarMessage): SidecarState {
           // hit "already in progress". The UI swaps the Rendering→Complete
           // card off `complete` instead (see `rendering` in App.tsx).
           break;
+        case "cancelled":
+          // Primary, unambiguous cancel signal. Like `complete`, leave
+          // `running` true — controls re-enable only on `exit` so a fast
+          // re-click can't race the still-terminating sidecar.
+          next.cancelled = event;
+          next.done = true;
+          break;
       }
       return next;
     }
@@ -210,6 +245,7 @@ function reduce(prev: SidecarState, msg: SidecarMessage): SidecarState {
       return {
         ...prev,
         running: false,
+        cancelling: false,
         done: true,
         exitCode: msg.code,
       };

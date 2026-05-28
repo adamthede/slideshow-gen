@@ -158,6 +158,16 @@ Lifecycle terminator on success. Lists all output files written.
 
 For chunked output, multiple entries appear in `outputs`.
 
+### `cancelled`
+
+Lifecycle terminator when the render is cancelled (the embedder sent SIGTERM — see [Cancellation](#cancellation)). Emitted *instead of* `complete`, immediately before the process exits with code `130`. No output file is written.
+
+```json
+{"v": 1, "t": 42.3, "type": "cancelled", "message": null}
+```
+
+`message` is optional. This event is the **primary, unambiguous** cancel signal — prefer it over the exit-code heuristic below.
+
 ## Lifecycle examples
 
 ### Happy path
@@ -198,9 +208,24 @@ error("...")
 
 Process exits non-zero. No `complete`.
 
-### Cancellation (future)
+### Cancellation
 
-When the embedding process terminates the sidecar (e.g. user clicks Cancel), the sidecar receives SIGTERM. It cleans the temp directory and exits without emitting `complete`. The embedder should treat absence-of-`complete` + non-zero exit + recent `progress` as "cancelled or crashed mid-render."
+```
+started
+phase_started(images)
+progress(images) × N
+cancelled
+```
+
+Process exits `130`. No `complete`, no output file.
+
+When the embedder wants to cancel (user clicks Cancel), it sends **SIGTERM** to the sidecar process. On the `--ipc` path the engine has, at render start, isolated itself and all its FFmpeg children into their own process group; on SIGTERM it reaps that whole group (no orphaned FFmpeg), removes the temp directory (honoring `--keep-temp`), emits `cancelled`, and exits `130`.
+
+The embedder must **not** use `CommandChild::kill()` / SIGKILL for a normal cancel — SIGKILL is uncatchable, so the engine cannot clean up (orphaned FFmpeg, leaked temp). SIGKILL is appropriate only as an escalation if the process has not exited within a grace period after SIGTERM.
+
+Detecting cancellation, in priority order:
+1. **The `cancelled` event** (primary, unambiguous).
+2. *Fallback only* (e.g. after a SIGKILL escalation where `cancelled` never made it out): absence-of-`complete` + non-zero exit + a recent `progress` — indistinguishable from a mid-render crash, so use only when no `cancelled` event was seen.
 
 ## Exit codes
 

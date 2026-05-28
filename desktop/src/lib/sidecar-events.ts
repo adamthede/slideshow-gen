@@ -94,6 +94,11 @@ export interface CompleteEvent extends BaseEvent {
   elapsed_s: number;
 }
 
+export interface CancelledEvent extends BaseEvent {
+  type: "cancelled";
+  message: string | null;
+}
+
 /** Discriminated union of every IPC event the sidecar can emit. */
 export type SidecarEvent =
   | StartedEvent
@@ -105,7 +110,8 @@ export type SidecarEvent =
   | InfoEvent
   | WarningEvent
   | ErrorEvent
-  | CompleteEvent;
+  | CompleteEvent
+  | CancelledEvent;
 
 /**
  * Wire-level envelope from the Rust shell. Mirrors `SidecarMessage`

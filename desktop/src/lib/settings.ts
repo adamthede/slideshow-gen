@@ -27,6 +27,9 @@ export interface RenderSettings {
   noOverlays: boolean;
   noDate: boolean;
   noLocation: boolean;
+  /** Keep the render's temp directory instead of deleting it (debugging).
+   *  Honored on both normal completion and cancellation. Maps to --keep-temp. */
+  keepTemp: boolean;
 }
 
 export const DEFAULT_SETTINGS: RenderSettings = {
@@ -42,6 +45,7 @@ export const DEFAULT_SETTINGS: RenderSettings = {
   noOverlays: false,
   noDate: false,
   noLocation: false,
+  keepTemp: false,
 };
 
 const STORAGE_KEY = "marquee.renderSettings.v1";
@@ -104,6 +108,10 @@ function loadSettings(): RenderSettings {
         typeof parsed.noLocation === "boolean"
           ? parsed.noLocation
           : DEFAULT_SETTINGS.noLocation,
+      keepTemp:
+        typeof parsed.keepTemp === "boolean"
+          ? parsed.keepTemp
+          : DEFAULT_SETTINGS.keepTemp,
     };
   } catch {
     return DEFAULT_SETTINGS;

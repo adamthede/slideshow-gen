@@ -6,13 +6,21 @@ Phase 3: Batches + video clips -> final composite
 """
 
 import gc
+import os
 import shutil
+import signal
 import subprocess
 import tempfile
 import time
 from pathlib import Path
 
 import click
+
+# Exit code emitted when a render is cancelled via SIGTERM. Non-zero so the
+# embedder sees a failure; distinct from 1 so cancel is distinguishable from a
+# generic error in logs. The embedder's primary cancel signal is the
+# `cancelled` event (see docs/sidecar-protocol.md); this code is the fallback.
+CANCEL_EXIT_CODE = 130
 
 from .config import RenderConfig
 from .discovery import MediaItem, detect_duplicates, scan_directories, sort_items
@@ -36,6 +44,7 @@ class RenderPipeline:
         temp_base: Path | None = None, chunk_seconds: float | None = None,
         keep_temp: bool = False, recursive: bool = False,
         estimate_only: bool = False, reporter: Reporter | None = None,
+        cancellable: bool = False,
     ):
         self.config = config
         self.dirs = dirs
@@ -47,9 +56,77 @@ class RenderPipeline:
         self.estimate_only = estimate_only
         self.reporter: Reporter = reporter or ConsoleReporter(verbose=config.verbose)
         self.temp_dir: Path | None = None
+        # When True (the sidecar/IPC path), isolate this process + all its
+        # FFmpeg children into their own process group and handle SIGTERM as a
+        # graceful cancel. Off by default so interactive console runs keep
+        # normal shell job control (Ctrl-C → KeyboardInterrupt → finally cleanup).
+        self.cancellable = cancellable
+        # True only when _install_cancel_handler successfully made this process
+        # the leader of its own process group. The SIGTERM handler gates its
+        # killpg on this — without isolation, killpg(getpgrp()) would target
+        # the *host app's* group (Marquee), which could SIGTERM the embedder.
+        self._owns_process_group: bool = False
+
+    def _cleanup_temp(self) -> None:
+        """Remove the temp directory unless --keep-temp. Safe to call repeatedly
+        and from a signal handler (no-op if temp was never created)."""
+        if self.temp_dir and self.temp_dir.exists():
+            if self.keep_temp:
+                self.reporter.info(f"Temp directory preserved: {self.temp_dir}")
+            else:
+                shutil.rmtree(self.temp_dir, ignore_errors=True)
+                if self.config.verbose:
+                    self.reporter.info("Cleaned up temp directory.")
+
+    def _install_cancel_handler(self) -> None:
+        """Isolate this process tree into its own process group and install a
+        SIGTERM handler that reaps the whole tree, cleans temp, and exits.
+
+        Process-group isolation is what makes cancellation safe and complete:
+        the host app (Marquee) spawns us in *its* group, so signaling a group
+        from the Rust side could hit the app. By becoming our own group leader
+        here — before any FFmpeg child is spawned — `killpg(our_group)` in the
+        handler reaps the worker pool + their FFmpeg children + any direct
+        FFmpeg Popen in one shot, and provably cannot reach the host.
+
+        If isolation fails for any reason, `_owns_process_group` stays False
+        and the SIGTERM handler will *skip* `killpg` rather than risk
+        signaling the host app's group — temp still gets cleaned and
+        `cancelled` is still emitted, just without the group-wide reap."""
+        try:
+            os.setpgrp()  # setpgid(0, 0): we become a new process-group leader
+            # setpgrp() can return without raising even when we're not actually
+            # the new group leader (e.g. on platforms where it's a no-op).
+            # Verify by checking we equal our own group, so the handler only
+            # signals a group we genuinely own.
+            self._owns_process_group = os.getpgrp() == os.getpid()
+        except OSError:
+            self._owns_process_group = False  # not isolated; handler will skip killpg
+        signal.signal(signal.SIGTERM, self._on_sigterm)
+
+    def _on_sigterm(self, signum, frame) -> None:
+        # killpg below re-delivers SIGTERM to ourselves (we're in the group we
+        # signal); ignore it first so the handler can't re-enter / recurse.
+        signal.signal(signal.SIGTERM, signal.SIG_IGN)
+        # Gate the group signal on confirmed isolation. Without this, a silent
+        # setpgrp failure would leave us in the host app's group and killpg
+        # would SIGTERM the embedder.
+        if self._owns_process_group:
+            try:
+                os.killpg(os.getpgrp(), signal.SIGTERM)
+            except OSError:
+                pass
+        self._cleanup_temp()
+        self.reporter.cancelled()
+        # Hard-exit from the handler: temp is already cleaned and the
+        # `cancelled` event is already flushed (JsonReporter flushes per emit).
+        # os._exit avoids running the `finally` again or any atexit handlers.
+        os._exit(CANCEL_EXIT_CODE)
 
     def run(self):
         """Execute the full three-phase render pipeline."""
+        if self.cancellable:
+            self._install_cancel_handler()
         start_time = time.time()
         self.reporter.started({
             "output": str(self.output),
@@ -193,14 +270,9 @@ class RenderPipeline:
             self.reporter.complete(outputs, elapsed)
 
         finally:
-            # Cleanup temp directory (unless --keep-temp)
-            if self.temp_dir and self.temp_dir.exists():
-                if self.keep_temp:
-                    self.reporter.info(f"Temp directory preserved: {self.temp_dir}")
-                else:
-                    shutil.rmtree(self.temp_dir, ignore_errors=True)
-                    if self.config.verbose:
-                        self.reporter.info("Cleaned up temp directory.")
+            # Cleanup temp directory (unless --keep-temp). Shared with the
+            # SIGTERM cancel path so a cancelled render cleans up identically.
+            self._cleanup_temp()
 
     def _single_output(self, segments: list[dict]) -> list[Path]:
         """Render all segments into a single output file."""

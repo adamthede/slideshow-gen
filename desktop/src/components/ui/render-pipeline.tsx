@@ -15,6 +15,12 @@ export interface RenderPipelineProps {
   phaseStartedAt: number | null;
   /** Latest progress tick. */
   progress: { done: number; total: number; phase: string; t: number } | null;
+  /** Request cancellation of the in-flight render. When omitted, no Cancel
+   *  control is shown. */
+  onCancel?: () => void;
+  /** True once a cancel has been requested, until the process exits. Disables
+   *  the Cancel button and switches its label to "Cancelling…". */
+  cancelling?: boolean;
 }
 
 /** mm:ss clock (m can exceed 59 for long renders). */
@@ -57,6 +63,8 @@ export function RenderPipeline({
   phase,
   phaseStartedAt,
   progress,
+  onCancel,
+  cancelling = false,
 }: RenderPipelineProps) {
   const activeStep = phaseToStepIndex(phase);
   // Only apply the fill fraction when the latest progress tick belongs to
@@ -136,10 +144,26 @@ export function RenderPipeline({
         <span className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
           Rendering
         </span>
-        <span className="font-mono text-sm tabular-nums text-foreground">
-          {formatClock(liveElapsed)}
-          <span className="ml-1 text-xs text-muted-foreground">elapsed</span>
-        </span>
+        <div className="flex items-baseline gap-3">
+          <span className="font-mono text-sm tabular-nums text-foreground">
+            {formatClock(liveElapsed)}
+            <span className="ml-1 text-xs text-muted-foreground">elapsed</span>
+          </span>
+          {onCancel && (
+            <button
+              type="button"
+              onClick={onCancel}
+              disabled={cancelling}
+              className={cn(
+                "rounded-md border px-2.5 py-1 text-xs font-medium transition-colors",
+                "border-border text-muted-foreground hover:border-destructive hover:text-destructive",
+                "disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:border-border disabled:hover:text-muted-foreground",
+              )}
+            >
+              {cancelling ? "Cancelling…" : "Cancel"}
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="grid grid-cols-4 gap-2.5">
