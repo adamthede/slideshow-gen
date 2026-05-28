@@ -7,20 +7,21 @@
 | Cycle | Date | Found | Actioned | Dismissed | Skipped | Commit | Ratio |
 |-------|------|-------|----------|-----------|---------|--------|-------|
 | 1 | 2026-05-28 17:38 | 5 | 3 | 2 | 0 | 9e6eae8 | 60% |
+| 2 | 2026-05-28 17:47 | 2 | 0 | 2 | 0 | — | 0% |
 
 ## Reviewer Effectiveness
 | Reviewer | Total Found | T1 (Must) | T2 (Should) | T3 (Consider) | T4 (Dismiss) | Actioned % | Signal:Noise |
 |----------|------------|-----------|-------------|---------------|-------------|-----------|-------------|
 | Copilot | 3 | 0 | 3 | 0 | 0 | 100% | 3:0 |
-| Gemini | 2 | 0 | 0 | 0 | 2 | 0% | 0:2 |
+| Gemini | 4 | 0 | 0 | 0 | 4 | 0% | 0:4 |
 
 ## Issue Categories (Cumulative)
 | Category | T1 | T2 | T3 | T4 | Total | % of All |
 |----------|----|----|----|----|-------|----------|
-| api-contract | 0 | 3 | 0 | 0 | 3 | 60% |
-| style | 0 | 0 | 0 | 2 | 2 | 40% |
+| api-contract | 0 | 3 | 0 | 0 | 3 | 43% |
+| style | 0 | 0 | 0 | 4 | 4 | 57% |
 
-**Status:** IN PROGRESS (awaiting cycle 2 bot response)
+**Status:** READY TO MERGE
 
 ---
 
@@ -84,3 +85,38 @@ No T3 items this cycle.
 ### Commit
 SHA: 9e6eae8
 Message: fix: Address PR review cycle 1 — resolve relative paths in item_failed events
+
+---
+
+## Cycle 2 — 2026-05-28 17:47
+
+### Actioned (0)
+No T1 or T2 items this cycle.
+
+### Dismissed (2)
+
+#### T4-DISMISS: Windows backslash path separator in App.tsx line 80 (re-raise)
+- **File:** `desktop/src/App.tsx:80`
+- **Category:** `style`
+- **Reviewer:** Gemini (`gemini-code-assist`)
+- **Disposition:** DISMISSED — Identical re-raise of cycle 1 thread 1. Marquee is macOS-only per PRD NFR6. Gemini stable noise pattern.
+- **Thread ID:** PRRT_kwDOR-Xvl86FiYx4
+
+#### T4-DISMISS: Windows backslash path separator in App.tsx line 840 (re-raise)
+- **File:** `desktop/src/App.tsx:840`
+- **Category:** `style`
+- **Reviewer:** Gemini (`gemini-code-assist`)
+- **Disposition:** DISMISSED — Identical re-raise of cycle 1 thread 2. Marquee is macOS-only per PRD NFR6. Gemini stable noise pattern.
+- **Thread ID:** PRRT_kwDOR-Xvl86FiYx9
+
+### Skipped (0)
+No T3 items this cycle.
+
+### Recurrence Patterns
+- **Gemini Windows path-separator noise is now confirmed in cycle 2 of this PR as well.** Gemini re-raised the exact same 2 comments after the cycle 1 push (which made no changes to App.tsx). This matches the documented hotspot: Gemini will re-raise Windows portability suggestions even when the fix pushed was unrelated to the flagged lines. **Recommendation:** Add to CLAUDE.md — on any PR touching `desktop/src/`, immediately dismiss Gemini path-separator Windows portability suggestions without reading them.
+
+### Commit
+SHA: — (no code changes this cycle)
+
+### Loop Termination
+Termination criterion 5 met: cycle 2 actioned=0 and current check found 0 unresolved threads. **Status: READY TO MERGE.**
