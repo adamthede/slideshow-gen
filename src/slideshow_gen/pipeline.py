@@ -565,7 +565,7 @@ class RenderPipeline:
                 )
                 self.reporter.item_failed(
                     phase="images",
-                    path=str(item.path),
+                    path=str(item.path.resolve()),
                     reason="video prep failed",
                     detail=tail or None,
                 )
@@ -576,7 +576,7 @@ class RenderPipeline:
             click.echo(f"  Warning: Video prep failed for {item.path.name}: {e}", err=True)
             self.reporter.item_failed(
                 phase="images",
-                path=str(item.path),
+                path=str(item.path.resolve()),
                 reason="video prep exception",
                 detail=str(e),
             )

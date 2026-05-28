@@ -134,7 +134,7 @@ def _render_worker(args: tuple) -> tuple[int, str | None, str, tuple[str, str | 
     return (
         index,
         str(path_result) if path_result else None,
-        str(item.path),
+        str(item.path.resolve()),
         err,
     )
 
@@ -190,7 +190,7 @@ def parallel_render(
 
     # Map orig_idx -> source path for failure attribution when the worker
     # crashes outright (no result tuple to inspect).
-    idx_to_path: dict[int, str] = {orig_idx: str(item.path) for orig_idx, item in image_items}
+    idx_to_path: dict[int, str] = {orig_idx: str(item.path.resolve()) for orig_idx, item in image_items}
     skipped = 0
 
     with ProcessPoolExecutor(max_workers=workers) as executor:
