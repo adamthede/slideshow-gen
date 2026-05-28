@@ -1,6 +1,6 @@
 # Story 4.3: Render cancellation
 
-Status: ready for dispatch
+Status: review
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -62,28 +62,28 @@ Net: **Rust sends SIGTERM to `CommandChild::pid()`** (never `kill()`/SIGKILL exc
 
 - [x] **Task 1: Cancel-signaling contract — DECIDED** (AC: #5, #6)
   - **Decision:** add an explicit `cancelled` event (additive → **no** `PROTOCOL_VERSION` bump per `sidecar-protocol.md:212-214`; the Rust parser at `sidecar.rs:50-70` already forwards unknown-but-well-formed events, and the TS union ignores unrecognized ones). The absence-of-`complete` heuristic is retained only as a fallback for a SIGKILL'd process that never got to emit `cancelled`.
-  - [ ] Remaining doc task: promote `docs/sidecar-protocol.md` "Cancellation (future)" → real, documenting the `cancelled` event shape + non-zero exit code.
+  - [x] Done: promoted promote `docs/sidecar-protocol.md` "Cancellation (future)" → real, documenting the `cancelled` event shape + non-zero exit code.
 
-- [ ] **Task 2: Engine — isolate process group, catch SIGTERM, reap subtree, clean temp** (AC: #2, #3, #4, #5) — *mechanism verified in spike, see Dev Notes*
+- [x] **Task 2: Engine — isolate process group, catch SIGTERM, reap subtree, clean temp** (AC: #2, #3, #4, #5) — *mechanism verified in spike, see Dev Notes*
   - [ ] On the `--ipc` render path only, call `os.setpgrp()` at render start **before** any pool/FFmpeg spawn, so the engine subtree forms its own process group (leader = the Python process, distinct from Marquee's group). Guard so the human CLI path is unaffected.
   - [ ] Install a SIGTERM handler that: (1) `os.killpg(os.getpgrp(), signal.SIGTERM)` to reap `ProcessPoolExecutor` workers (`ffmpeg.py:176`) + their FFmpeg children + the direct `Popen`/`subprocess.run` FFmpeg (`ffmpeg.py:299,425,511`) in one shot; (2) runs the existing temp cleanup (raise into the `finally` at `pipeline.py:195-203`, or call the cleanup directly — honoring `keep_temp`); (3) emits `cancelled` via the reporter *before* exit; (4) exits non-zero.
   - [ ] Confirm `complete` is never emitted on cancel and no output MP4 is written (a partial/temp file must not survive as a finished render).
 
-- [ ] **Task 3: Rust — `cancel_render` command (SIGTERM to pid + SIGKILL escalation)** (AC: #2, #7)
+- [x] **Task 3: Rust — `cancel_render` command (SIGTERM to pid + SIGKILL escalation)** (AC: #2, #7)
   - [ ] Add a `cancel_render` `#[tauri::command]` that reads the stored child's `pid()` (`sidecar.rs:40-43`) and sends **SIGTERM** to that PID via `nix`/`libc` `kill` — **not** `CommandChild::kill()` (which is SIGKILL and uncatchable). The onefile bootloader forwards SIGTERM to the Python child (verified). Hold the `SidecarState` mutex appropriately.
   - [ ] Escalation: if the child hasn't reached `Terminated` within a grace window (~5 s), send SIGKILL to the pid as a last resort so a wedged FFmpeg can't hang cancellation forever. (Engine-owned `killpg` should make this rare.)
   - [ ] Leave the existing `Terminated` handler as the single place that clears the child handle (`sidecar.rs:188-192`) — cancel *requests* the stop; `exit` *confirms* it.
   - [ ] Register `cancel_render` in `invoke_handler`. Add `nix` (or `libc`) to `Cargo.toml` if not already present.
 
-- [ ] **Task 4: Frontend — Cancel button + cancelled state** (AC: #1, #6, #7)
+- [x] **Task 4: Frontend — Cancel button + cancelled state** (AC: #1, #6, #7)
   - [ ] Add `cancelRender()` to `useSidecar.ts` (invokes `cancel_render`); add a `cancelling` flag and a `cancelled` state derived from the `cancelled` event (or the heuristic). Validate any new event fields at the reducer trust boundary (consistent with the S2 cycle-3/4 hardening).
   - [ ] Add the Cancel button to `RenderPipeline` (the slot S2 deferred). Disable on click → "Cancelling…"; never re-enable render/scan until `exit` (AC #7, the recurrence-hotspot rule).
   - [ ] Add a "Render cancelled" card/state in `App.tsx`, wired to the PR #5 recovery actions (New slideshow / Render again).
 
-- [ ] **Task 5: `--keep-temp` setting parity** (AC: #8)
+- [x] **Task 5: `--keep-temp` setting parity** (AC: #8)
   - [ ] Expose a keep-temp toggle in the settings drawer (`settings.ts` + the override-diff in `App.tsx`); forward `--keep-temp` via the existing `append_settings()` mechanism in `lib.rs`.
 
-- [ ] **Task 6: Tests + rebuild + manual cancel QA** (AC: #3, #9)
+- [x] **Task 6: Tests + rebuild + manual cancel QA** (AC: #3, #9)
   - [ ] Python: a test asserting SIGTERM → temp dir removed + no `complete` (and `cancelled` emitted if chosen). Extend `tests/test_ipc_protocol.py` if a new event is added.
   - [ ] Rust: unit-test the arg/command wiring; (signal delivery itself is integration-level — cover via manual QA).
   - [ ] Frontend: `tsc` + `npm run build` clean; add vitest for any new pure state-derivation logic.
@@ -126,9 +126,43 @@ Unlike S1/S2 (no Python changes), this story edits the engine, so `desktop/scrip
 - [Source: docs/pr-reviews/DASHBOARD.md — Recurrence Hotspots] — client running-state-tracks-lifecycle rule.
 - [Source: _bmad-output/implementation-artifacts/4-2-progress-pipeline.md] — Cancel button explicitly deferred from S2 to S3.
 
+## Dev Agent Record
+
+### Agent Model Used
+claude-opus-4-7 (Claude Code), implemented interactively on `feat/epic-4-s3-cancellation`.
+
+### Completion Notes
+- **Engine** (`pipeline.py`, `events.py`, `cli.py`): `RenderPipeline(cancellable=…)` (set from `--ipc`) calls `os.setpgrp()` at `run()` start and installs a SIGTERM handler that `killpg`-reaps its own group, runs the shared `_cleanup_temp()` (honoring `--keep-temp`), emits a new `cancelled` reporter event, and `os._exit(130)`. The `finally` path was refactored onto the same `_cleanup_temp()` helper. Console/Json reporters both implement `cancelled`. Interactive (non-IPC) runs are untouched — no setpgrp, normal Ctrl-C.
+- **Rust** (`sidecar.rs`, `lib.rs`, `Cargo.toml`): `cancel_render` command → `cancel_sidecar()` sends `libc::kill(pid, SIGTERM)` (not `CommandChild::kill()`/SIGKILL), leaves the handle in place so the existing `Terminated`→`exit` path drives the UI, and spawns a thread that escalates to SIGKILL after a 5 s grace only if the same pid is still registered. `libc` declared explicitly (already transitive). `keep_temp` setting → `--keep-temp`.
+- **Frontend** (`sidecar-events.ts`, `useSidecar.ts`, `render-pipeline.tsx`, `App.tsx`, `settings.ts`): `CancelledEvent` type; `cancelled`/`cancelling` state + `cancelRender()` action; reducer leaves `running` true on `cancelled` and clears `cancelling` only on `exit` (lifecycle-correct, per the recurrence hotspot). Cancel button in `RenderPipeline` (→ "Cancelling…", disabled). "Render cancelled" card with Render again / New slideshow recovery. `keepTemp` setting + drawer toggle + `buildOverrides`.
+- **Decision recorded:** explicit `cancelled` event is the primary signal; the absence-of-`complete` heuristic is documented as the SIGKILL-only fallback. Protocol doc updated.
+
+### Verification
+- `pytest tests/` — 11/11 (incl. new `test_ipc_cancel_cleans_up_and_emits_cancelled`: SIGTERM mid-render → `cancelled`, temp removed, no `complete`, no output, no orphan ffmpeg, exit 130).
+- `cargo test --lib` — 23/23 (+2 keep-temp arg tests; `cancelled` added to the parser vocabulary test).
+- `tsc --noEmit` clean; `vite build` clean (50 modules); `vitest` 21/21.
+- **Sidecar rebuilt + re-signed** (Developer ID, signature verified). **Cancel verified against the frozen binary** twice — including with two ffmpeg workers actively encoding at signal time: exit 130, `cancelled` emitted, temp cleaned, no output, **both ffmpeg workers reaped (no orphans)**. Confirms the spike's `setpgrp`+`killpg` mechanism survives the real PyInstaller bootloader.
+- **Deferred to the user:** interactive GUI QA via the running `npm run tauri dev` (cancel button, cancelled card, recovery, controls re-enabling on exit) — not headless-runnable, per S1/S2 precedent.
+
+### File List
+- `src/slideshow_gen/events.py` (modified) — `cancelled` reporter method (ABC + Console + Json).
+- `src/slideshow_gen/pipeline.py` (modified) — `cancellable`, `_install_cancel_handler`, `_on_sigterm`, `_cleanup_temp`; `CANCEL_EXIT_CODE`.
+- `src/slideshow_gen/cli.py` (modified) — pass `cancellable=ipc`.
+- `tests/test_ipc_protocol.py` (modified) — cancel test + `_make_assets(count)` + `_list_ffmpeg_pids`.
+- `docs/sidecar-protocol.md` (modified) — `cancelled` event + real Cancellation section.
+- `desktop/src-tauri/src/sidecar.rs` (modified) — `cancel_sidecar` + escalation; `cancelled` in vocab test.
+- `desktop/src-tauri/src/lib.rs` (modified) — `cancel_render` command, `keep_temp` setting, keep-temp tests.
+- `desktop/src-tauri/Cargo.toml` (modified) — `libc`.
+- `desktop/src/lib/sidecar-events.ts` (modified) — `CancelledEvent`.
+- `desktop/src/hooks/useSidecar.ts` (modified) — cancelled/cancelling state, `cancelRender`, reducer cases.
+- `desktop/src/components/ui/render-pipeline.tsx` (modified) — Cancel button.
+- `desktop/src/App.tsx` (modified) — cancelled card, wiring, keep-temp toggle.
+- `desktop/src/lib/settings.ts` (modified) — `keepTemp` setting + load guard.
+
 ## Change Log
 
 | Date | Change |
 |------|--------|
 | 2026-05-27 | Story drafted from PRD E4.S3 + codebase reconnaissance (Rust SIGKILL trap, Python `finally`-cleanup gap, FFmpeg child teardown, `cancelled`-event decision). Status → draft. |
 | 2026-05-27 | Spike resolved both open questions with frozen onefile probes: (b) bootloader forwards SIGTERM to the Python child by PID, even across a child `setpgrp`; (a) engine-owned teardown via `os.setpgrp()` + `os.killpg(own-group, SIGTERM)` reaps pool workers + FFmpeg grandchildren with no orphans, and is provably app-safe (group leader is the engine, not Marquee). Tasks 1–3 + Dev Notes updated to the verified mechanism. Status → ready for dispatch. |
+| 2026-05-27 | Implemented all six tasks across engine/Rust/frontend (3 commits). Sidecar rebuilt + re-signed; cancel verified against the frozen binary with ffmpeg actively encoding (exit 130, `cancelled`, temp cleaned, no output, no orphans). pytest 11/11, cargo 23/23, tsc/vite clean, vitest 21/21. Interactive GUI QA left to the user. Status → review. |
