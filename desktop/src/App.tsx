@@ -166,7 +166,7 @@ function settingsSummary(s: RenderSettings): string {
 }
 
 function App() {
-  const { state, start, startRender, reset } = useSidecar();
+  const { state, start, startRender, cancelRender, reset } = useSidecar();
   const [settings, setSettings] = useSettings();
   const [folders, setFolders] = useState<string[]>([]);
   const [dragging, setDragging] = useState(false);
@@ -320,6 +320,7 @@ function App() {
     if (settings.noOverlays) overrides.noOverlays = true;
     if (settings.noDate) overrides.noDate = true;
     if (settings.noLocation) overrides.noLocation = true;
+    if (settings.keepTemp) overrides.keepTemp = true;
     return Object.keys(overrides).length ? overrides : undefined;
   }
 
@@ -381,6 +382,8 @@ function App() {
     discovery,
     estimate,
     complete,
+    cancelled,
+    cancelling,
     progress,
     phase,
     phaseStartedAt,
@@ -388,10 +391,10 @@ function App() {
     running,
   } = state;
   const hasResults = discovery !== null || estimate !== null;
-  // `complete` arrives before the process exits (which is what flips
-  // `running` off). Gate on `!complete` so the card swaps to "Render
-  // complete" immediately, while controls stay disabled until `exit`.
-  const rendering = running && isRendering && !complete;
+  // `complete`/`cancelled` arrive before the process exits (which is what flips
+  // `running` off). Gate on `!complete && !cancelled` so the card swaps to its
+  // terminal state immediately, while controls stay disabled until `exit`.
+  const rendering = running && isRendering && !complete && !cancelled;
 
   function truncateMiddle(path: string, max = 80): string {
     if (path.length <= max) return path;
@@ -651,6 +654,11 @@ function App() {
                     onChange={(v) => update("noLocation", v)}
                     disabled={settings.noOverlays}
                   />
+                  <Toggle
+                    label="Keep temp files (debugging)"
+                    checked={settings.keepTemp}
+                    onChange={(v) => update("keepTemp", v)}
+                  />
                 </div>
               </div>
 
@@ -759,6 +767,8 @@ function App() {
                 phase={phase}
                 phaseStartedAt={phaseStartedAt}
                 progress={progress}
+                onCancel={cancelRender}
+                cancelling={cancelling}
               />
             </CardContent>
           </Card>
@@ -808,6 +818,33 @@ function App() {
                   onClick={resetAll}
                   disabled={running}
                 >
+                  New slideshow
+                </Button>
+                <span className="text-xs text-muted-foreground">
+                  Render again uses the same folders &amp; settings · New
+                  slideshow clears everything.
+                </span>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {cancelled && (
+          <Card className="border-muted-foreground/40">
+            <CardHeader>
+              <CardTitle>Render cancelled</CardTitle>
+              <CardDescription>
+                {cancelled.message?.trim()
+                  ? cancelled.message
+                  : "Stopped before completion. No output file was written and temporary files were cleaned up."}
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="flex items-center gap-3 flex-wrap">
+                <Button onClick={runRender} disabled={running}>
+                  Render again
+                </Button>
+                <Button variant="outline" onClick={resetAll} disabled={running}>
                   New slideshow
                 </Button>
                 <span className="text-xs text-muted-foreground">
