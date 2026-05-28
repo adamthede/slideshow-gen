@@ -34,6 +34,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag != '' && inputs.tag || github.ref }}
 
       - name: Set up Python 3.11
         uses: actions/setup-python@v5
@@ -64,7 +66,7 @@ jobs:
             --collect-all slideshow_gen \
             --collect-all reverse_geocoder \
             --collect-all pillow_heif \
-            src/slideshow_gen/cli.py
+            desktop/scripts/sidecar_entry.py
           cp dist/slideshow-gen desktop/src-tauri/binaries/slideshow-gen-aarch64-apple-darwin
           chmod +x desktop/src-tauri/binaries/slideshow-gen-aarch64-apple-darwin
           file desktop/src-tauri/binaries/slideshow-gen-aarch64-apple-darwin
@@ -111,7 +113,7 @@ jobs:
           security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
 
           CERT_PATH="$RUNNER_TEMP/cert.p12"
-          echo -n "$APPLE_CERTIFICATE" | base64 --decode -o "$CERT_PATH"
+          echo -n "$APPLE_CERTIFICATE" | base64 --decode > "$CERT_PATH"
 
           security import "$CERT_PATH" \
             -P "$APPLE_CERTIFICATE_PASSWORD" \
