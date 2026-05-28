@@ -142,5 +142,8 @@ def render(
             temp_base=temp_dir, chunk_seconds=chunk_secs,
             keep_temp=keep_temp, recursive=recursive,
             estimate_only=estimate_only, reporter=reporter,
+            # Only the IPC/sidecar path opts into process-group isolation +
+            # SIGTERM-as-cancel; interactive console runs keep shell job control.
+            cancellable=ipc,
         )
         pipeline.run()

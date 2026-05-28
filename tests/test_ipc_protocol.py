@@ -5,8 +5,11 @@ fields, or version should require updating both this test and the doc.
 """
 
 import json
+import os
+import signal
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 from PIL import Image
@@ -14,10 +17,11 @@ from PIL import Image
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 
-def _make_assets(d: Path) -> None:
-    for i, color in enumerate(["red", "green", "blue"]):
-        Image.new("RGB", (1200, 900), color=color).save(
-            d / f"2026-05-23 12-0{i}-00 - test.jpg", quality=85
+def _make_assets(d: Path, count: int = 3) -> None:
+    colors = ["red", "green", "blue", "yellow", "purple", "orange", "cyan", "magenta"]
+    for i in range(count):
+        Image.new("RGB", (1200, 900), color=colors[i % len(colors)]).save(
+            d / f"2026-05-23 12-{i:02d}-00 - test.jpg", quality=85
         )
 
 
@@ -166,3 +170,101 @@ def test_ipc_full_render_lifecycle(tmp_path):
     assert done["outputs"][0]["path"] == str(out)
     assert done["outputs"][0]["size_bytes"] > 0
     assert out.exists()
+
+
+def _list_ffmpeg_pids() -> set[int]:
+    """PIDs of currently-running ffmpeg processes (for orphan detection)."""
+    out = subprocess.run(["pgrep", "-x", "ffmpeg"], capture_output=True, text=True)
+    return {int(p) for p in out.stdout.split() if p.strip()}
+
+
+def test_ipc_cancel_cleans_up_and_emits_cancelled(tmp_path):
+    """SIGTERM mid-render → `cancelled` event, temp removed, no `complete`,
+    no output file, no orphaned ffmpeg children, non-zero exit.
+
+    Exercises the engine teardown (setpgrp + killpg + temp cleanup) against the
+    installed CLI entry point. The PyInstaller-bootloader signal *forwarding* is
+    verified separately in manual QA against the frozen sidecar (story 4.3)."""
+    src = tmp_path / "src"
+    src.mkdir()
+    # Enough images (Ken Burns, not --static) that phase 1 runs long enough to
+    # interrupt deterministically.
+    _make_assets(src, count=8)
+    out = tmp_path / "out.mp4"
+    temp_root = tmp_path / "temp"
+    temp_root.mkdir()
+
+    ffmpeg_before = _list_ffmpeg_pids()
+
+    proc = subprocess.Popen(
+        [
+            "slideshow-gen", "render", "--ipc",
+            "--dir", str(src),
+            "-o", str(out),
+            "--slide-duration", "2",
+            "--fade-duration", "0.5",
+            "--fps", "24",
+            "--workers", "2",
+            "--temp-dir", str(temp_root),
+        ],
+        stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+    )
+
+    # Read events until phase 1 ("images") is underway, so the temp dir exists
+    # and ffmpeg children are spawned when we signal.
+    saw_images_phase = False
+    deadline = time.time() + 60
+    assert proc.stdout is not None
+    for line in proc.stdout:
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            evt = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if evt.get("type") == "phase_started" and evt.get("phase") == "images":
+            saw_images_phase = True
+            break
+        if evt.get("type") in ("progress",) and evt.get("phase") == "images":
+            saw_images_phase = True
+            break
+        if time.time() > deadline:
+            break
+    assert saw_images_phase, "render never reached the images phase before timeout"
+
+    # A temp dir should now exist under our temp root.
+    time.sleep(0.5)
+    temp_dirs_during = list(temp_root.glob("slideshow-gen-*"))
+    assert temp_dirs_during, "expected a slideshow-gen-* temp dir during render"
+
+    # Cancel: SIGTERM to the CLI process (mimics Rust sending SIGTERM to the
+    # sidecar pid). Collect the rest of stdout.
+    proc.send_signal(signal.SIGTERM)
+    remaining = proc.stdout.read()
+    rc = proc.wait(timeout=30)
+
+    tail_events = []
+    for line in remaining.strip().split("\n"):
+        if line.strip():
+            try:
+                tail_events.append(json.loads(line))
+            except json.JSONDecodeError:
+                pass
+
+    # Non-zero exit (cancel is a failure to the embedder).
+    assert rc != 0, f"expected non-zero exit on cancel, got {rc}"
+    # `cancelled` event emitted; `complete` never emitted.
+    types = [e.get("type") for e in tail_events]
+    assert "cancelled" in types, f"no cancelled event; tail types={types}"
+    assert "complete" not in types
+    # Temp dir cleaned up (no --keep-temp).
+    leftover = list(temp_root.glob("slideshow-gen-*"))
+    assert not leftover, f"temp dir not cleaned on cancel: {leftover}"
+    # No output file written.
+    assert not out.exists(), "cancelled render must not leave an output file"
+    # No orphaned ffmpeg processes from this render. Allow a brief grace for
+    # the OS to reap, and only count PIDs that weren't running before.
+    time.sleep(1.0)
+    orphans = _list_ffmpeg_pids() - ffmpeg_before
+    assert not orphans, f"orphaned ffmpeg processes after cancel: {orphans}"

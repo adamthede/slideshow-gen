@@ -74,6 +74,9 @@ class Reporter(ABC):
     @abstractmethod
     def complete(self, outputs: list[Path], elapsed_s: float) -> None: ...
 
+    @abstractmethod
+    def cancelled(self, message: str | None = None) -> None: ...
+
 
 class ConsoleReporter(Reporter):
     """Human-readable output via click.echo. Preserves the original CLI feel."""
@@ -155,6 +158,10 @@ class ConsoleReporter(Reporter):
         click.echo(f"\n  Done! {total_size:.1f} MB in {elapsed_s:.0f}s")
         for p in outputs:
             click.echo(f"  Output: {p}")
+
+    def cancelled(self, message: str | None = None) -> None:
+        tail = f" — {message}" if message else ""
+        click.echo(f"\n  Cancelled{tail}.", err=True)
 
 
 class JsonReporter(Reporter):
@@ -251,3 +258,6 @@ class JsonReporter(Reporter):
         self._emit(
             "complete", outputs=out_records, elapsed_s=round(elapsed_s, 3)
         )
+
+    def cancelled(self, message: str | None = None) -> None:
+        self._emit("cancelled", message=message)
