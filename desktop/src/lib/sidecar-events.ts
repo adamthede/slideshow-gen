@@ -88,10 +88,26 @@ export interface ErrorEvent extends BaseEvent {
   message: string;
 }
 
+/**
+ * Non-fatal per-item failure: one input file could not be processed and was
+ * skipped. The render continues. Surface passively in the UI — no modal.
+ */
+export interface ItemFailedEvent extends BaseEvent {
+  type: "item_failed";
+  phase: Phase | string;
+  path: string;
+  reason: string;
+  /** Optional longer diagnostic (e.g. last lines of FFmpeg stderr). */
+  detail?: string;
+}
+
 export interface CompleteEvent extends BaseEvent {
   type: "complete";
   outputs: Array<{ path: string; size_bytes: number }>;
   elapsed_s: number;
+  /** Count of items skipped via `item_failed`. Additive — may be absent on
+   *  older engine builds; treat as 0 when missing. */
+  items_skipped?: number;
 }
 
 export interface CancelledEvent extends BaseEvent {
@@ -110,6 +126,7 @@ export type SidecarEvent =
   | InfoEvent
   | WarningEvent
   | ErrorEvent
+  | ItemFailedEvent
   | CompleteEvent
   | CancelledEvent;
 

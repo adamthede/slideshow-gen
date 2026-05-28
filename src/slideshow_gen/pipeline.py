@@ -66,6 +66,10 @@ class RenderPipeline:
         # killpg on this — without isolation, killpg(getpgrp()) would target
         # the *host app's* group (Marquee), which could SIGTERM the embedder.
         self._owns_process_group: bool = False
+        # Running count of per-item failures across all phases. Surfaced in the
+        # `complete` event as `items_skipped`; the UI mirrors this against the
+        # stream of `item_failed` events for the post-render warnings panel.
+        self._items_skipped: int = 0
 
     def _cleanup_temp(self) -> None:
         """Remove the temp directory unless --keep-temp. Safe to call repeatedly
@@ -267,7 +271,7 @@ class RenderPipeline:
                 return
 
             elapsed = time.time() - start_time
-            self.reporter.complete(outputs, elapsed)
+            self.reporter.complete(outputs, elapsed, items_skipped=self._items_skipped)
 
         finally:
             # Cleanup temp directory (unless --keep-temp). Shared with the
@@ -350,6 +354,12 @@ class RenderPipeline:
     ) -> list[dict]:
         """Ken Burns pipeline: Phase 1 (parallel clips) → Phase 2 (batch reduce)."""
         rendered_clips = parallel_render(items, self.temp_dir, self.config, self.reporter)
+
+        # Phase 1 per-item failures: every image that didn't produce a clip is a
+        # skip. `parallel_render` already emitted `item_failed` per skip; here
+        # we just maintain the cumulative count for the final `complete` event.
+        phase1_skipped = max(0, len(images) - len(rendered_clips))
+        self._items_skipped += phase1_skipped
 
         if not rendered_clips and not videos:
             self.reporter.error("No images rendered successfully.")
@@ -548,14 +558,29 @@ class RenderPipeline:
         try:
             result = subprocess.run(cmd, capture_output=True, text=True, timeout=1800)
             if result.returncode != 0:
+                tail = (result.stderr or "")[-400:]
                 click.echo(
-                    f"  Warning: Video prep failed for {item.path.name}: {result.stderr[:200]}",
+                    f"  Warning: Video prep failed for {item.path.name}: {tail[:200]}",
                     err=True,
                 )
+                self.reporter.item_failed(
+                    phase="images",
+                    path=str(item.path),
+                    reason="video prep failed",
+                    detail=tail or None,
+                )
+                self._items_skipped += 1
                 return None
             return output_path
         except Exception as e:
             click.echo(f"  Warning: Video prep failed for {item.path.name}: {e}", err=True)
+            self.reporter.item_failed(
+                phase="images",
+                path=str(item.path),
+                reason="video prep exception",
+                detail=str(e),
+            )
+            self._items_skipped += 1
             return None
 
     def _count_batches(self, segments: list[dict]) -> int:
