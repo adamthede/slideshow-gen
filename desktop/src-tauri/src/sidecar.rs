@@ -15,6 +15,12 @@ use tauri_plugin_shell::{
     ShellExt,
 };
 use std::sync::Mutex;
+use std::time::Duration;
+
+/// Grace period between the graceful SIGTERM and the SIGKILL escalation. If the
+/// engine hasn't reaped its process group and exited within this window, a
+/// wedged FFmpeg is assumed and we hard-kill the pid.
+const CANCEL_GRACE: Duration = Duration::from_secs(5);
 
 /// Event channel the frontend subscribes to.
 pub const SIDECAR_EVENT: &str = "marquee://sidecar-event";
@@ -204,6 +210,54 @@ pub fn spawn_sidecar(app: &AppHandle, args: Vec<String>) -> Result<(), String> {
     Ok(())
 }
 
+/// Cancel the in-flight render by sending **SIGTERM** to the sidecar pid.
+///
+/// SIGTERM (not `CommandChild::kill()`, which is SIGKILL) is deliberate: the
+/// engine catches SIGTERM, reaps its own process group (FFmpeg children
+/// included), removes its temp dir, emits `cancelled`, and exits — none of
+/// which a SIGKILL would allow. The PyInstaller onefile bootloader forwards
+/// SIGTERM to the Python child (verified in the E4.S3 spike).
+///
+/// We signal by pid and leave the `CommandChild` handle in place, so the normal
+/// `Terminated` path (which clears the handle and emits `exit`) still drives the
+/// frontend's lifecycle. A SIGKILL escalation fires after `CANCEL_GRACE` only if
+/// the process is still registered with the same pid.
+pub fn cancel_sidecar(app: &AppHandle) -> Result<(), String> {
+    let state = app.state::<SidecarState>();
+    let pid = {
+        let guard = state.child.lock().map_err(|e| e.to_string())?;
+        match guard.as_ref() {
+            Some(child) => child.pid() as i32,
+            None => return Err("No render is running.".into()),
+        }
+    };
+
+    // Graceful stop. The engine does the heavy lifting (killpg of its own group
+    // + temp cleanup) on receipt.
+    unsafe {
+        libc::kill(pid, libc::SIGTERM);
+    }
+
+    // Escalation: hard-kill if the child is still registered with this pid after
+    // the grace period (the `Terminated` handler clears the handle on a clean
+    // exit, so a cleared/replaced handle means we should not signal again).
+    let app = app.clone();
+    std::thread::spawn(move || {
+        std::thread::sleep(CANCEL_GRACE);
+        if let Some(state) = app.try_state::<SidecarState>() {
+            if let Ok(guard) = state.child.lock() {
+                if guard.as_ref().map(|c| c.pid() as i32) == Some(pid) {
+                    unsafe {
+                        libc::kill(pid, libc::SIGKILL);
+                    }
+                }
+            }
+        }
+    });
+
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -336,6 +390,7 @@ mod tests {
             r#"{"v":1,"t":95,"type":"warning","message":"oops","file":null}"#,
             r#"{"v":1,"t":0.05,"type":"error","message":"FFmpeg not found"}"#,
             r#"{"v":1,"t":21600,"type":"complete","outputs":[{"path":"/o","size_bytes":1}],"elapsed_s":21600}"#,
+            r#"{"v":1,"t":42.3,"type":"cancelled","message":null}"#,
         ];
         for line in events {
             assert!(parse_sidecar_line(line).is_some(), "failed: {line}");
