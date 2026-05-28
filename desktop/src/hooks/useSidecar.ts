@@ -141,13 +141,13 @@ export function useSidecar() {
     try {
       await invoke("cancel_render");
     } catch (err) {
-      // "No render is running" etc. — clear the optimistic flag; the process
-      // is presumably already gone and `exit` will reconcile the rest.
-      setState((prev) => ({
-        ...prev,
-        cancelling: false,
-        error: typeof err === "string" ? err : String(err),
-      }));
+      // Most likely "No render is running" — a benign race where the engine
+      // exited between the click and the IPC dispatch. The `exit` message
+      // (already in flight or already processed) reconciles the rest, so just
+      // clear the optimistic flag. Surfacing this as state.error would pop
+      // the red error card for a harmless race.
+      console.warn("[marquee] cancel_render failed (likely a benign race):", err);
+      setState((prev) => ({ ...prev, cancelling: false }));
     }
   }, []);
 

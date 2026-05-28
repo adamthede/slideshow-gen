@@ -394,7 +394,9 @@ function App() {
   // `complete`/`cancelled` arrive before the process exits (which is what flips
   // `running` off). Gate on `!complete && !cancelled` so the card swaps to its
   // terminal state immediately, while controls stay disabled until `exit`.
-  const rendering = running && isRendering && !complete && !cancelled;
+  // Also gate on `!error` so a fatal `error` event mid-render doesn't briefly
+  // stack the Error card on top of the Rendering card before `exit` arrives.
+  const rendering = running && isRendering && !complete && !cancelled && !error;
 
   function truncateMiddle(path: string, max = 80): string {
     if (path.length <= max) return path;

@@ -61,6 +61,11 @@ class RenderPipeline:
         # graceful cancel. Off by default so interactive console runs keep
         # normal shell job control (Ctrl-C → KeyboardInterrupt → finally cleanup).
         self.cancellable = cancellable
+        # True only when _install_cancel_handler successfully made this process
+        # the leader of its own process group. The SIGTERM handler gates its
+        # killpg on this — without isolation, killpg(getpgrp()) would target
+        # the *host app's* group (Marquee), which could SIGTERM the embedder.
+        self._owns_process_group: bool = False
 
     def _cleanup_temp(self) -> None:
         """Remove the temp directory unless --keep-temp. Safe to call repeatedly
@@ -82,21 +87,35 @@ class RenderPipeline:
         from the Rust side could hit the app. By becoming our own group leader
         here — before any FFmpeg child is spawned — `killpg(our_group)` in the
         handler reaps the worker pool + their FFmpeg children + any direct
-        FFmpeg Popen in one shot, and provably cannot reach the host."""
+        FFmpeg Popen in one shot, and provably cannot reach the host.
+
+        If isolation fails for any reason, `_owns_process_group` stays False
+        and the SIGTERM handler will *skip* `killpg` rather than risk
+        signaling the host app's group — temp still gets cleaned and
+        `cancelled` is still emitted, just without the group-wide reap."""
         try:
             os.setpgrp()  # setpgid(0, 0): we become a new process-group leader
+            # setpgrp() can return without raising even when we're not actually
+            # the new group leader (e.g. on platforms where it's a no-op).
+            # Verify by checking we equal our own group, so the handler only
+            # signals a group we genuinely own.
+            self._owns_process_group = os.getpgrp() == os.getpid()
         except OSError:
-            pass  # already a session/group leader, or unsupported — degrade gracefully
+            self._owns_process_group = False  # not isolated; handler will skip killpg
         signal.signal(signal.SIGTERM, self._on_sigterm)
 
     def _on_sigterm(self, signum, frame) -> None:
         # killpg below re-delivers SIGTERM to ourselves (we're in the group we
         # signal); ignore it first so the handler can't re-enter / recurse.
         signal.signal(signal.SIGTERM, signal.SIG_IGN)
-        try:
-            os.killpg(os.getpgrp(), signal.SIGTERM)
-        except OSError:
-            pass
+        # Gate the group signal on confirmed isolation. Without this, a silent
+        # setpgrp failure would leave us in the host app's group and killpg
+        # would SIGTERM the embedder.
+        if self._owns_process_group:
+            try:
+                os.killpg(os.getpgrp(), signal.SIGTERM)
+            except OSError:
+                pass
         self._cleanup_temp()
         self.reporter.cancelled()
         # Hard-exit from the handler: temp is already cleaned and the
