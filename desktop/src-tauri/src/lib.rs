@@ -182,15 +182,19 @@ fn allow_output_file(app: tauri::AppHandle, path: String) -> Result<(), String> 
     if path.trim().is_empty() {
         return Err("No path provided.".into());
     }
-    let path_buf = std::path::Path::new(&path);
-    if !path_buf.is_absolute() {
-        return Err("Path must be absolute.".into());
-    }
-    if path_buf.extension().and_then(|s| s.to_str()) != Some("mp4") {
+    // Resolve symlinks before the extension check so a symlink named
+    // `render.mp4` pointing at e.g. `~/.ssh/id_rsa` can't slip past it.
+    let path_buf = std::fs::canonicalize(std::path::Path::new(&path))
+        .map_err(|e| format!("Failed to canonicalize path: {e}"))?;
+    let has_mp4_ext = path_buf
+        .extension()
+        .and_then(|s| s.to_str())
+        .is_some_and(|s| s.eq_ignore_ascii_case("mp4"));
+    if !has_mp4_ext {
         return Err("Only MP4 outputs may be exposed to the webview.".into());
     }
     app.asset_protocol_scope()
-        .allow_file(&path)
+        .allow_file(&path_buf)
         .map_err(|e| format!("Failed to extend asset protocol scope: {e}"))
 }
 
