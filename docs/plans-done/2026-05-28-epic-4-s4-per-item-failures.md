@@ -1,7 +1,8 @@
 ---
 title: "Epic 4.S4: Per-item failure handling (passive warnings panel)"
-status: "QA Needed"
+status: "Done"
 created: 2026-05-28
+completed: 2026-05-28
 linked_pr: "https://github.com/adamthede/slideshow-gen/pull/8"
 ---
 
