@@ -4,6 +4,7 @@ use std::process::Command;
 
 use serde::Deserialize;
 use sidecar::{cancel_sidecar, spawn_sidecar, SidecarState};
+use tauri::Manager;
 
 /// Render settings the frontend can override. Each field is optional —
 /// `None` means "let the CLI use its default", so the Rust shell never
@@ -170,26 +171,20 @@ async fn start_render(
     spawn_sidecar(&app, args)
 }
 
-/// Reveal a finished output file in Finder (`open -R "$path"`).
+/// Extend the asset-protocol scope at runtime to include a specific file,
+/// so the webview `<video>` element can load it via `convertFileSrc`.
 ///
-/// macOS-only by design (see PRD NFR6). Returns the underlying `open`
-/// error verbatim so the UI can surface it without prefixing.
+/// Replaces the static `$HOME/**` scope entry that previously exposed every
+/// file under the user's home directory. The frontend invokes this once per
+/// completed render with the absolute output path before mounting `<video>`.
 #[tauri::command]
-fn reveal_in_finder(path: String) -> Result<(), String> {
+fn allow_output_file(app: tauri::AppHandle, path: String) -> Result<(), String> {
     if path.trim().is_empty() {
         return Err("No path provided.".into());
     }
-    Command::new("/usr/bin/open")
-        .args(["-R", "--", &path])
-        .status()
-        .map_err(|e| format!("Failed to invoke /usr/bin/open: {e}"))
-        .and_then(|status| {
-            if status.success() {
-                Ok(())
-            } else {
-                Err(format!("/usr/bin/open -R exited with status {status}"))
-            }
-        })
+    app.asset_protocol_scope()
+        .allow_file(&path)
+        .map_err(|e| format!("Failed to extend asset protocol scope: {e}"))
 }
 
 /// Open the file in QuickTime Player (`open -a "QuickTime Player" "$path"`).
@@ -235,7 +230,7 @@ pub fn run() {
             start_scan,
             start_render,
             cancel_render,
-            reveal_in_finder,
+            allow_output_file,
             open_in_quicktime
         ])
         .run(tauri::generate_context!())

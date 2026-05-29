@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
+import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -261,35 +262,63 @@ function ResultView({
   const itemCount = useMemo(() => {
     if (!discovery) return null;
     const skippedImages = Math.min(skipped, discovery.images);
+    const skippedVideos = Math.min(
+      Math.max(0, skipped - discovery.images),
+      discovery.videos,
+    );
     const renderedImages = Math.max(0, discovery.images - skippedImages);
+    const renderedVideos = Math.max(0, discovery.videos - skippedVideos);
     const parts: string[] = [];
     parts.push(`${renderedImages.toLocaleString()} image${renderedImages === 1 ? "" : "s"}`);
     if (discovery.videos > 0) {
       parts.push(
-        `${discovery.videos.toLocaleString()} video${discovery.videos === 1 ? "" : "s"}`,
+        `${renderedVideos.toLocaleString()} video${renderedVideos === 1 ? "" : "s"}`,
       );
     }
     return parts.join(" + ");
   }, [discovery, skipped]);
 
   // Convert the absolute output path into a Tauri asset-protocol URL so the
-  // webview `<video>` element can stream it. The asset protocol is enabled
-  // in tauri.conf.json with scope $HOME/** + $TEMP/**.
+  // webview `<video>` element can stream it. The asset protocol's static
+  // scope is just $TEMP/**; the output file is allowed dynamically below
+  // via the `allow_output_file` Tauri command before the URL is exposed.
   const videoSrc = useMemo(
     () => (primary ? convertFileSrc(primary.path) : ""),
     [primary],
   );
+
+  // Extend the asset-protocol scope to include this specific output file,
+  // then expose the cache-busted URL. Until the scope is extended, the URL
+  // is empty so the `<video>` element doesn't attempt a load that would
+  // get blocked.
+  const [videoAllowed, setVideoAllowed] = useState(false);
+  useEffect(() => {
+    if (!primary?.path) {
+      setVideoAllowed(false);
+      return;
+    }
+    setVideoAllowed(false);
+    invoke<void>("allow_output_file", { path: primary.path })
+      .then(() => setVideoAllowed(true))
+      .catch((err) =>
+        console.error("[marquee] allow_output_file failed:", err),
+      );
+  }, [primary?.path]);
+
   // Cache-bust the asset URL per render so a same-named file from a previous
   // run isn't served from the webview cache. (The user can name two renders
   // the same path, or "Render Again" can overwrite.)
   const cacheBustedSrc = useMemo(
-    () => (videoSrc ? `${videoSrc}?t=${Math.floor(complete.t)}` : ""),
-    [videoSrc, complete.t],
+    () =>
+      videoAllowed && videoSrc
+        ? `${videoSrc}?t=${Math.floor(complete.t)}`
+        : "",
+    [videoAllowed, videoSrc, complete.t],
   );
 
   function handleReveal(path: string) {
-    invoke("reveal_in_finder", { path }).catch((err) =>
-      console.error("[marquee] reveal_in_finder failed:", err),
+    revealItemInDir(path).catch((err) =>
+      console.error("[marquee] revealItemInDir failed:", err),
     );
   }
 
