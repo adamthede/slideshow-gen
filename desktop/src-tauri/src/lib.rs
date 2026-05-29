@@ -179,15 +179,15 @@ fn reveal_in_finder(path: String) -> Result<(), String> {
     if path.trim().is_empty() {
         return Err("No path provided.".into());
     }
-    Command::new("open")
-        .args(["-R", &path])
+    Command::new("/usr/bin/open")
+        .args(["-R", "--", &path])
         .status()
-        .map_err(|e| format!("Failed to invoke `open`: {e}"))
+        .map_err(|e| format!("Failed to invoke /usr/bin/open: {e}"))
         .and_then(|status| {
             if status.success() {
                 Ok(())
             } else {
-                Err(format!("`open -R` exited with status {status}"))
+                Err(format!("/usr/bin/open -R exited with status {status}"))
             }
         })
 }
@@ -201,15 +201,15 @@ fn open_in_quicktime(path: String) -> Result<(), String> {
     if path.trim().is_empty() {
         return Err("No path provided.".into());
     }
-    Command::new("open")
-        .args(["-a", "QuickTime Player", &path])
+    Command::new("/usr/bin/open")
+        .args(["-a", "QuickTime Player", "--", &path])
         .status()
-        .map_err(|e| format!("Failed to invoke `open`: {e}"))
+        .map_err(|e| format!("Failed to invoke /usr/bin/open: {e}"))
         .and_then(|status| {
             if status.success() {
                 Ok(())
             } else {
-                Err(format!("`open -a QuickTime Player` exited with status {status}"))
+                Err(format!("/usr/bin/open -a QuickTime Player exited with status {status}"))
             }
         })
 }
