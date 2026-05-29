@@ -1,5 +1,7 @@
 mod sidecar;
 
+use std::process::Command;
+
 use serde::Deserialize;
 use sidecar::{cancel_sidecar, spawn_sidecar, SidecarState};
 
@@ -168,6 +170,50 @@ async fn start_render(
     spawn_sidecar(&app, args)
 }
 
+/// Reveal a finished output file in Finder (`open -R "$path"`).
+///
+/// macOS-only by design (see PRD NFR6). Returns the underlying `open`
+/// error verbatim so the UI can surface it without prefixing.
+#[tauri::command]
+fn reveal_in_finder(path: String) -> Result<(), String> {
+    if path.trim().is_empty() {
+        return Err("No path provided.".into());
+    }
+    Command::new("open")
+        .args(["-R", &path])
+        .status()
+        .map_err(|e| format!("Failed to invoke `open`: {e}"))
+        .and_then(|status| {
+            if status.success() {
+                Ok(())
+            } else {
+                Err(format!("`open -R` exited with status {status}"))
+            }
+        })
+}
+
+/// Open the file in QuickTime Player (`open -a "QuickTime Player" "$path"`).
+///
+/// macOS-only by design (see PRD NFR6). If QuickTime is missing or refuses
+/// to open the file, the error from `open` is bubbled up.
+#[tauri::command]
+fn open_in_quicktime(path: String) -> Result<(), String> {
+    if path.trim().is_empty() {
+        return Err("No path provided.".into());
+    }
+    Command::new("open")
+        .args(["-a", "QuickTime Player", &path])
+        .status()
+        .map_err(|e| format!("Failed to invoke `open`: {e}"))
+        .and_then(|status| {
+            if status.success() {
+                Ok(())
+            } else {
+                Err(format!("`open -a QuickTime Player` exited with status {status}"))
+            }
+        })
+}
+
 /// Cancel the in-flight render. Sends SIGTERM to the sidecar so the engine can
 /// reap its FFmpeg children and clean up its temp dir before exiting; a SIGKILL
 /// escalation fires only if it doesn't exit within the grace period. The
@@ -185,7 +231,13 @@ pub fn run() {
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
         .manage(SidecarState::default())
-        .invoke_handler(tauri::generate_handler![start_scan, start_render, cancel_render])
+        .invoke_handler(tauri::generate_handler![
+            start_scan,
+            start_render,
+            cancel_render,
+            reveal_in_finder,
+            open_in_quicktime
+        ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

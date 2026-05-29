@@ -1,7 +1,7 @@
 ---
 title: Epic 4.S5 — post-render result view + Move #6 render report
-status: In Progress
-linked_pr: ""
+status: QA Needed
+linked_pr: "https://github.com/adamthede/slideshow-gen/pull/10"
 ---
 
 # Epic 4.S5: In-app result view + Feltron-style render report
