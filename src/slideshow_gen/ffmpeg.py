@@ -33,10 +33,13 @@ def render_image_to_clip(
     index: int,
     temp_dir: Path,
     config: RenderConfig,
-) -> Path | None:
+) -> tuple[Path | None, tuple[str, str | None] | None]:
     """Render a single image to a temp MP4 with Ken Burns effect and overlays.
 
-    Returns the path to the temp clip, or None on failure.
+    Returns ``(output_path, None)`` on success or ``(None, (reason, detail))``
+    on failure. The structured failure tuple lets the caller emit a typed
+    `item_failed` IPC event (reason is a short string; detail may include the
+    last lines of FFmpeg stderr for diagnostics).
     """
     source = item.path
 
@@ -46,7 +49,7 @@ def render_image_to_clip(
             source = convert_heic_to_jpg(source, temp_dir)
         except Exception as e:
             click.echo(f"  Warning: HEIC conversion failed for {item.path.name}: {e}", err=True)
-            return None
+            return None, ("HEIC conversion failed", str(e))
 
     # Choose Ken Burns effect
     effect = choose_effect(item.width, item.height, config.output_ratio)
@@ -96,23 +99,30 @@ def render_image_to_clip(
             timeout=300,  # 5 min per image should be more than enough
         )
         if result.returncode != 0:
+            tail = (result.stderr or "")[-400:]
             click.echo(
-                f"  Warning: FFmpeg failed for {item.path.name}: {result.stderr[:200]}",
+                f"  Warning: FFmpeg failed for {item.path.name}: {tail[:200]}",
                 err=True,
             )
-            return None
-        return output_path
+            return None, ("ffmpeg returned non-zero", tail or None)
+        return output_path, None
     except subprocess.TimeoutExpired:
         click.echo(f"  Warning: FFmpeg timed out for {item.path.name}", err=True)
-        return None
+        return None, ("ffmpeg timed out", None)
     except Exception as e:
         click.echo(f"  Warning: Error rendering {item.path.name}: {e}", err=True)
-        return None
+        return None, ("render exception", str(e))
 
 
 # Standalone function for ProcessPoolExecutor (must be picklable)
-def _render_worker(args: tuple) -> tuple[int, str | None]:
-    """Worker function for parallel rendering. Returns (index, output_path_or_none)."""
+def _render_worker(args: tuple) -> tuple[int, str | None, str, tuple[str, str | None] | None]:
+    """Worker function for parallel rendering.
+
+    Returns ``(index, output_path_or_none, source_path, error_info)`` where
+    ``error_info`` is ``(reason, detail)`` on failure or ``None`` on success.
+    The source path is echoed back so the orchestrator can attach it to an
+    ``item_failed`` IPC event without re-deriving from the original items list.
+    """
     item_data, index, temp_dir_str, config_dict = args
 
     # Reconstruct objects from serializable data
@@ -120,8 +130,13 @@ def _render_worker(args: tuple) -> tuple[int, str | None]:
     temp_dir = Path(temp_dir_str)
     item = MediaItem(**item_data)
 
-    result = render_image_to_clip(item, index, temp_dir, config)
-    return (index, str(result) if result else None)
+    path_result, err = render_image_to_clip(item, index, temp_dir, config)
+    return (
+        index,
+        str(path_result) if path_result else None,
+        str(item.path.resolve()),
+        err,
+    )
 
 
 def parallel_render(
@@ -173,6 +188,11 @@ def parallel_render(
     else:
         click.echo(f"\n  [images] Rendering {total} images with {workers} workers...")
 
+    # Map orig_idx -> source path for failure attribution when the worker
+    # crashes outright (no result tuple to inspect).
+    idx_to_path: dict[int, str] = {orig_idx: str(item.path.resolve()) for orig_idx, item in image_items}
+    skipped = 0
+
     with ProcessPoolExecutor(max_workers=workers) as executor:
         futures = {executor.submit(_render_worker, w): w[1] for w in work}
 
@@ -180,17 +200,38 @@ def parallel_render(
             completed += 1
             orig_idx = futures[future]
             try:
-                idx, path_str = future.result()
+                idx, path_str, src_path, err = future.result()
                 if path_str:
                     results.append((idx, Path(path_str)))
-            except Exception as e:
-                msg = f"Worker failed for index {orig_idx}: {e}"
-                if reporter is not None:
-                    reporter.warning(msg)
                 else:
-                    click.echo(f"  Warning: {msg}", err=True)
+                    skipped += 1
+                    reason, detail = err if err else ("unknown failure", None)
+                    if reporter is not None:
+                        reporter.item_failed(
+                            phase="images",
+                            path=src_path,
+                            reason=reason,
+                            detail=detail,
+                        )
+            except Exception as e:
+                # Worker itself crashed (pickling error, OOM, etc.) — surface
+                # as item_failed so the UI can still account for the skip.
+                skipped += 1
+                src_path = idx_to_path.get(orig_idx, "")
+                if reporter is not None:
+                    reporter.item_failed(
+                        phase="images",
+                        path=src_path,
+                        reason="worker crashed",
+                        detail=str(e),
+                    )
+                else:
+                    click.echo(
+                        f"  Warning: Worker failed for index {orig_idx}: {e}", err=True,
+                    )
 
-            # Progress
+            # Progress reflects *attempted* total so the bar still completes
+            # even when items are skipped — per docs/sidecar-protocol.md.
             if reporter is not None:
                 reporter.progress("images", completed, total)
             else:

@@ -76,8 +76,15 @@ function summarize(event: SidecarEvent): string {
       return `warning: ${event.message}`;
     case "error":
       return `error: ${event.message}`;
-    case "complete":
-      return `complete: ${event.outputs.length} output(s), ${formatDuration(event.elapsed_s)}`;
+    case "item_failed": {
+      const name = event.path.split("/").pop() ?? event.path;
+      return `item_failed (${event.phase}): ${name} — ${event.reason}`;
+    }
+    case "complete": {
+      const skipped = event.items_skipped ?? 0;
+      const skippedTail = skipped > 0 ? `, ${skipped} skipped` : "";
+      return `complete: ${event.outputs.length} output(s), ${formatDuration(event.elapsed_s)}${skippedTail}`;
+    }
     default: {
       const unknown = event as { type?: unknown };
       return `unknown event: ${JSON.stringify(unknown)}`;
@@ -387,6 +394,7 @@ function App() {
     progress,
     phase,
     phaseStartedAt,
+    warnings,
     error,
     running,
   } = state;
@@ -764,7 +772,7 @@ function App() {
 
         {rendering && (
           <Card>
-            <CardContent className="pt-6">
+            <CardContent className="pt-6 space-y-3">
               <RenderPipeline
                 phase={phase}
                 phaseStartedAt={phaseStartedAt}
@@ -772,6 +780,14 @@ function App() {
                 onCancel={cancelRender}
                 cancelling={cancelling}
               />
+              {warnings.length > 0 && (
+                <div
+                  className="text-xs text-muted-foreground bg-muted/40 rounded-md px-3 py-2"
+                  aria-live="polite"
+                >
+                  {warnings.length} item{warnings.length === 1 ? "" : "s"} skipped — render continues
+                </div>
+              )}
             </CardContent>
           </Card>
         )}
@@ -811,6 +827,31 @@ function App() {
                   </div>
                 </div>
               ))}
+              {warnings.length > 0 && (
+                <details className="text-xs bg-muted/40 rounded-md px-3 py-2">
+                  <summary className="cursor-pointer text-muted-foreground hover:text-foreground">
+                    {warnings.length} item{warnings.length === 1 ? "" : "s"} skipped
+                    {complete.items_skipped !== undefined && complete.items_skipped !== warnings.length
+                      ? ` (engine reported ${complete.items_skipped})`
+                      : ""}
+                  </summary>
+                  <ul className="mt-2 space-y-1 font-mono">
+                    {warnings.map((w, i) => {
+                      const name = w.path.split("/").pop() ?? w.path;
+                      return (
+                        <li
+                          key={`${w.path}-${i}`}
+                          className="flex items-start justify-between gap-3"
+                          title={w.detail ?? w.path}
+                        >
+                          <span className="truncate text-foreground">{name}</span>
+                          <span className="shrink-0 text-muted-foreground">{w.reason}</span>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </details>
+              )}
               <div className="flex items-center gap-3 flex-wrap pt-2">
                 <Button onClick={runRender} disabled={running}>
                   Render again

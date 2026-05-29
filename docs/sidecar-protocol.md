@@ -146,6 +146,29 @@ Fatal — render is aborting. Embedders should expect the process to exit non-ze
 {"v": 1, "t": 0.05, "type": "error", "message": "FFmpeg not found. Install via: brew install ffmpeg"}
 ```
 
+### `item_failed`
+
+A single input item could not be processed and was skipped. The render continues; this is a **non-fatal** per-item failure (e.g. one corrupt JPEG out of thousands). The UI should surface these passively — no modal, no required action.
+
+```json
+{"v": 1, "t": 95.0, "type": "item_failed",
+ "phase": "images",
+ "path": "/abs/path/to/corrupt.jpg",
+ "reason": "ffmpeg returned non-zero",
+ "detail": "...last lines of stderr..."}
+```
+
+Fields:
+
+- `phase`: which pipeline phase the failure occurred in. Currently always `"images"` (Phase 1 Ken Burns clip render, and item-scoped Phase 1 video prep). Future phases may emit per-item failures too.
+- `path`: absolute path of the offending source file.
+- `reason`: short human-readable string (e.g. `"ffmpeg returned non-zero"`, `"HEIC conversion failed"`, `"video prep failed"`, `"worker crashed"`).
+- `detail`: optional longer string with diagnostic context (last lines of FFmpeg stderr, exception message). Omitted when there's nothing useful to add.
+
+Skipped items are counted in the terminating `complete` event's `items_skipped` field. Progress counts continue to use the *attempted* total so the bar still completes.
+
+`item_failed` events are distinct from `warning` events: warnings are general non-fatal messages (e.g. "batch fell back to individual clips"); `item_failed` is specifically about a single input item being dropped from the render.
+
 ### `complete`
 
 Lifecycle terminator on success. Lists all output files written.
@@ -153,10 +176,13 @@ Lifecycle terminator on success. Lists all output files written.
 ```json
 {"v": 1, "t": 21600.0, "type": "complete",
  "outputs": [{"path": "/path/to/out.mp4", "size_bytes": 32145678901}],
- "elapsed_s": 21600.0}
+ "elapsed_s": 21600.0,
+ "items_skipped": 0}
 ```
 
 For chunked output, multiple entries appear in `outputs`.
+
+`items_skipped` is the count of source files that failed to process and were dropped (see `item_failed`). `0` when every input rendered cleanly. The number is monotonic with the count of `item_failed` events the embedder has seen — embedders that need per-item detail should accumulate `item_failed` events; `items_skipped` is the canonical summary number.
 
 ### `cancelled`
 
