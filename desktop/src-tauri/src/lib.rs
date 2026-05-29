@@ -182,6 +182,13 @@ fn allow_output_file(app: tauri::AppHandle, path: String) -> Result<(), String> 
     if path.trim().is_empty() {
         return Err("No path provided.".into());
     }
+    let path_buf = std::path::Path::new(&path);
+    if !path_buf.is_absolute() {
+        return Err("Path must be absolute.".into());
+    }
+    if path_buf.extension().and_then(|s| s.to_str()) != Some("mp4") {
+        return Err("Only MP4 outputs may be exposed to the webview.".into());
+    }
     app.asset_protocol_scope()
         .allow_file(&path)
         .map_err(|e| format!("Failed to extend asset protocol scope: {e}"))

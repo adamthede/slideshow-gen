@@ -293,16 +293,24 @@ function ResultView({
   // get blocked.
   const [videoAllowed, setVideoAllowed] = useState(false);
   useEffect(() => {
+    let active = true;
     if (!primary?.path) {
       setVideoAllowed(false);
       return;
     }
     setVideoAllowed(false);
     invoke<void>("allow_output_file", { path: primary.path })
-      .then(() => setVideoAllowed(true))
-      .catch((err) =>
-        console.error("[marquee] allow_output_file failed:", err),
-      );
+      .then(() => {
+        if (active) setVideoAllowed(true);
+      })
+      .catch((err) => {
+        if (active) {
+          console.error("[marquee] allow_output_file failed:", err);
+        }
+      });
+    return () => {
+      active = false;
+    };
   }, [primary?.path]);
 
   // Cache-bust the asset URL per render so a same-named file from a previous
