@@ -19,3 +19,7 @@ build/
 # Temp / render artifacts
 *.tmp
 *.log
+
+# PyInstaller (sidecar freezing in CI)
+*.spec
+desktop/src-tauri/binaries/

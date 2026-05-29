@@ -1,0 +1,220 @@
+name: Release (sign + notarize)
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to build (e.g. v0.1.0). If empty, builds HEAD with no release attached."
+        required: false
+        default: ""
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build, sign, notarize Marquee.app
+    runs-on: macos-14
+    timeout-minutes: 60
+
+    env:
+      # Apple credentials (provided via repo secrets)
+      APPLE_ID: ${{ secrets.APPLE_ID }}
+      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+      APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE_P12_BASE64 }}
+      APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+      # Identity string Tauri's bundler passes to codesign. Must match the
+      # common-name of the cert imported below.
+      APPLE_SIGNING_IDENTITY: "Developer ID Application: ADAM SPENCER THEDE (U85N54PC5J)"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag != '' && inputs.tag || github.ref }}
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install slideshow-gen + PyInstaller
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .
+          pip install pyinstaller
+
+      - name: Freeze slideshow-gen sidecar with PyInstaller
+        # Tauri's externalBin entry "binaries/slideshow-gen" expects a single
+        # file at binaries/slideshow-gen-<rust-target-triple> — so we use
+        # --onefile and copy the result to the triple-suffixed name. If
+        # notarization fails because --onefile's self-extracting archive
+        # can't be inspected, switch to --onedir and rewire as bundle
+        # resources (a larger change — calling out in the PR).
+        run: |
+          set -euxo pipefail
+          mkdir -p desktop/src-tauri/binaries
+          pyinstaller \
+            --noconfirm \
+            --onefile \
+            --name slideshow-gen \
+            --console \
+            --collect-all slideshow_gen \
+            --collect-all reverse_geocoder \
+            --collect-all pillow_heif \
+            desktop/scripts/sidecar_entry.py
+          cp dist/slideshow-gen desktop/src-tauri/binaries/slideshow-gen-aarch64-apple-darwin
+          chmod +x desktop/src-tauri/binaries/slideshow-gen-aarch64-apple-darwin
+          file desktop/src-tauri/binaries/slideshow-gen-aarch64-apple-darwin
+          desktop/src-tauri/binaries/slideshow-gen-aarch64-apple-darwin --help
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: desktop/package-lock.json
+
+      - name: Set up Rust (aarch64-apple-darwin)
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin
+
+      - name: Cache Cargo registry + target
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            desktop/src-tauri/target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('desktop/src-tauri/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+
+      - name: Install npm dependencies
+        working-directory: desktop
+        run: npm ci
+
+      - name: Import Developer ID Application certificate
+        # Creates a fresh temporary keychain, imports the .p12, sets it as default
+        # and unlocks it for the rest of the job. Tauri's bundler will find the
+        # identity via APPLE_SIGNING_IDENTITY env var (passed automatically).
+        run: |
+          set -euo pipefail
+          KEYCHAIN_PATH="$RUNNER_TEMP/build.keychain-db"
+          KEYCHAIN_PASSWORD="$(openssl rand -base64 24)"
+
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+
+          CERT_PATH="$RUNNER_TEMP/cert.p12"
+          echo -n "$APPLE_CERTIFICATE" | base64 --decode > "$CERT_PATH"
+
+          security import "$CERT_PATH" \
+            -P "$APPLE_CERTIFICATE_PASSWORD" \
+            -A -t cert -f pkcs12 \
+            -k "$KEYCHAIN_PATH"
+
+          security set-key-partition-list \
+            -S apple-tool:,apple: \
+            -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH" > /dev/null
+
+          # Make the new keychain the default + first in the search path.
+          security list-keychains -d user -s "$KEYCHAIN_PATH" $(security list-keychains -d user | sed s/\"//g)
+          security default-keychain -s "$KEYCHAIN_PATH"
+
+          # Persist for later steps that need to re-unlock.
+          echo "KEYCHAIN_PATH=$KEYCHAIN_PATH" >> "$GITHUB_ENV"
+          echo "KEYCHAIN_PASSWORD=$KEYCHAIN_PASSWORD" >> "$GITHUB_ENV"
+
+          # Sanity-check the identity is present.
+          security find-identity -v -p codesigning "$KEYCHAIN_PATH"
+
+      - name: Build Tauri bundle (signed)
+        working-directory: desktop
+        env:
+          # Tauri 2.x bundler reads these to sign the .app during the build.
+          APPLE_SIGNING_IDENTITY: ${{ env.APPLE_SIGNING_IDENTITY }}
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE_P12_BASE64 }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          CI: "true"
+        run: |
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          npm run tauri build -- --target aarch64-apple-darwin
+
+      - name: Locate built Marquee.app
+        id: locate
+        run: |
+          set -euo pipefail
+          APP_PATH=$(find desktop/src-tauri/target/aarch64-apple-darwin/release/bundle/macos -maxdepth 2 -name "Marquee.app" -type d | head -n1)
+          if [ -z "$APP_PATH" ]; then
+            echo "Marquee.app not found"
+            exit 1
+          fi
+          echo "app_path=$APP_PATH" >> "$GITHUB_OUTPUT"
+          echo "Found: $APP_PATH"
+
+      - name: Zip Marquee.app for notarization
+        id: zip
+        run: |
+          set -euo pipefail
+          APP_PATH="${{ steps.locate.outputs.app_path }}"
+          ZIP_PATH="$RUNNER_TEMP/Marquee.zip"
+          /usr/bin/ditto -c -k --keepParent "$APP_PATH" "$ZIP_PATH"
+          echo "zip_path=$ZIP_PATH" >> "$GITHUB_OUTPUT"
+
+      - name: Notarize with notarytool
+        run: |
+          xcrun notarytool submit "${{ steps.zip.outputs.zip_path }}" \
+            --apple-id "$APPLE_ID" \
+            --team-id "$APPLE_TEAM_ID" \
+            --password "$APPLE_APP_SPECIFIC_PASSWORD" \
+            --wait
+
+      - name: Staple ticket
+        run: xcrun stapler staple "${{ steps.locate.outputs.app_path }}"
+
+      - name: Verify signature + Gatekeeper acceptance
+        run: |
+          codesign --verify --deep --strict --verbose=2 "${{ steps.locate.outputs.app_path }}"
+          spctl -a -t exec -vv "${{ steps.locate.outputs.app_path }}"
+
+      - name: Re-zip stapled .app for release
+        id: zip_final
+        run: |
+          set -euo pipefail
+          APP_PATH="${{ steps.locate.outputs.app_path }}"
+          ZIP_PATH="$RUNNER_TEMP/Marquee-stapled.zip"
+          /usr/bin/ditto -c -k --keepParent "$APP_PATH" "$ZIP_PATH"
+          echo "zip_path=$ZIP_PATH" >> "$GITHUB_OUTPUT"
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Marquee-aarch64-apple-darwin
+          path: ${{ steps.zip_final.outputs.zip_path }}
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Attach to draft GitHub release (tag pushes only)
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          draft: true
+          files: ${{ steps.zip_final.outputs.zip_path }}
+          fail_on_unmatched_files: true
+
+      - name: Clean up keychain
+        if: always()
+        run: |
+          if [ -n "${KEYCHAIN_PATH:-}" ] && [ -f "$KEYCHAIN_PATH" ]; then
+            security delete-keychain "$KEYCHAIN_PATH" || true
+          fi
