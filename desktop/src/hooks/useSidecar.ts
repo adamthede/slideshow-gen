@@ -160,7 +160,31 @@ export function useSidecar() {
 
   const reset = useCallback(() => setState(initialState), []);
 
-  return { state, start, startRender, cancelRender, reset };
+  /**
+   * Clear terminal/post-render state (complete, cancelled, error, warnings,
+   * progress, raw events) while preserving the pre-render discovery and
+   * estimate snapshots. Used by the result view's "Render Again" action so the
+   * user returns to the Summary/Estimates view without losing what was scanned.
+   */
+  const clearCompletion = useCallback(() => {
+    setState((prev) => ({
+      ...prev,
+      events: [],
+      diagnostics: [],
+      phase: null,
+      phaseStartedAt: null,
+      progress: null,
+      complete: null,
+      cancelled: null,
+      cancelling: false,
+      warnings: [],
+      error: null,
+      done: false,
+      exitCode: null,
+    }));
+  }, []);
+
+  return { state, start, startRender, cancelRender, reset, clearCompletion };
 }
 
 function reduce(prev: SidecarState, msg: SidecarMessage): SidecarState {

@@ -1,7 +1,8 @@
 ---
 title: "Epic 5.S1: GitHub Actions build + sign + notarize pipeline"
-status: "QA Needed"
+status: "Done"
 created: 2026-05-28
+completed: 2026-05-28
 linked_pr: "https://github.com/adamthede/slideshow-gen/pull/7"
 ---
 
