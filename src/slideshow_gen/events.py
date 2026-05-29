@@ -72,7 +72,21 @@ class Reporter(ABC):
     def error(self, message: str) -> None: ...
 
     @abstractmethod
-    def complete(self, outputs: list[Path], elapsed_s: float) -> None: ...
+    def item_failed(
+        self,
+        phase: str,
+        path: str,
+        reason: str,
+        detail: str | None = None,
+    ) -> None: ...
+
+    @abstractmethod
+    def complete(
+        self,
+        outputs: list[Path],
+        elapsed_s: float,
+        items_skipped: int = 0,
+    ) -> None: ...
 
     @abstractmethod
     def cancelled(self, message: str | None = None) -> None: ...
@@ -153,9 +167,27 @@ class ConsoleReporter(Reporter):
     def error(self, message: str) -> None:
         click.echo(f"  Error: {message}", err=True)
 
-    def complete(self, outputs: list[Path], elapsed_s: float) -> None:
+    def item_failed(
+        self,
+        phase: str,
+        path: str,
+        reason: str,
+        detail: str | None = None,
+    ) -> None:
+        # Mirror the existing warning style so console users still see skipped
+        # items. The IPC event carries the richer structured payload.
+        name = Path(path).name if path else "<unknown>"
+        click.echo(f"  Skipped ({phase}): {name} — {reason}", err=True)
+
+    def complete(
+        self,
+        outputs: list[Path],
+        elapsed_s: float,
+        items_skipped: int = 0,
+    ) -> None:
         total_size = sum(p.stat().st_size for p in outputs if p.exists()) / (1024 * 1024)
-        click.echo(f"\n  Done! {total_size:.1f} MB in {elapsed_s:.0f}s")
+        skipped_suffix = f" ({items_skipped} skipped)" if items_skipped else ""
+        click.echo(f"\n  Done! {total_size:.1f} MB in {elapsed_s:.0f}s{skipped_suffix}")
         for p in outputs:
             click.echo(f"  Output: {p}")
 
@@ -250,13 +282,37 @@ class JsonReporter(Reporter):
     def error(self, message: str) -> None:
         self._emit("error", message=message)
 
-    def complete(self, outputs: list[Path], elapsed_s: float) -> None:
+    def item_failed(
+        self,
+        phase: str,
+        path: str,
+        reason: str,
+        detail: str | None = None,
+    ) -> None:
+        payload: dict[str, Any] = {
+            "phase": phase,
+            "path": path,
+            "reason": reason,
+        }
+        if detail is not None:
+            payload["detail"] = detail
+        self._emit("item_failed", **payload)
+
+    def complete(
+        self,
+        outputs: list[Path],
+        elapsed_s: float,
+        items_skipped: int = 0,
+    ) -> None:
         out_records = []
         for p in outputs:
             size = p.stat().st_size if p.exists() else 0
             out_records.append({"path": str(p), "size_bytes": size})
         self._emit(
-            "complete", outputs=out_records, elapsed_s=round(elapsed_s, 3)
+            "complete",
+            outputs=out_records,
+            elapsed_s=round(elapsed_s, 3),
+            items_skipped=items_skipped,
         )
 
     def cancelled(self, message: str | None = None) -> None:

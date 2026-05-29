@@ -7,6 +7,7 @@ import {
   type CompleteEvent,
   type DiscoveryCompleteEvent,
   type EstimateEvent,
+  type ItemFailedEvent,
   type SidecarEvent,
   type SidecarMessage,
 } from "@/lib/sidecar-events";
@@ -36,6 +37,11 @@ export interface SidecarState {
   /** True from the moment a cancel is requested until the process exits.
    *  Drives the "Cancelling…" affordance and keeps the Cancel button disabled. */
   cancelling: boolean;
+  /** Per-item failures collected from `item_failed` events. Passive surface —
+   *  display as a muted strip during render and a compact list post-render.
+   *  Never blocks the user. The terminating `complete` event also carries an
+   *  `items_skipped` count, which should always equal `warnings.length`. */
+  warnings: ItemFailedEvent[];
   /** Latest error message, or null. */
   error: string | null;
   /** True after `complete` event OR after process exit. */
@@ -57,6 +63,7 @@ const initialState: SidecarState = {
   complete: null,
   cancelled: null,
   cancelling: false,
+  warnings: [],
   error: null,
   done: false,
   running: false,
@@ -205,6 +212,11 @@ function reduce(prev: SidecarState, msg: SidecarMessage): SidecarState {
           break;
         case "error":
           next.error = event.message;
+          break;
+        case "item_failed":
+          // Passive collection — never blocks the UI. App.tsx renders these
+          // as a muted strip during render and a compact list post-render.
+          next.warnings = [...prev.warnings, event];
           break;
         case "complete":
           next.complete = event;

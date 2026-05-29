@@ -172,6 +172,76 @@ def test_ipc_full_render_lifecycle(tmp_path):
     assert out.exists()
 
 
+def test_ipc_per_item_failure_completes_with_skip(tmp_path):
+    """A deliberately bad input file is skipped; render still completes; an
+    `item_failed` event fires and `complete.items_skipped` reflects the count.
+
+    Locks the S4 contract: per-item failures are non-fatal and surface
+    passively in IPC. The render proceeds with the remaining valid items.
+    """
+    src = tmp_path / "src"
+    src.mkdir()
+    _make_assets(src, count=3)
+    # Corrupt fixture: a .heic by extension (so discovery picks it up as an
+    # image), but the bytes are not a valid HEIC container. HEIC pre-conversion
+    # fails fast in PIL with a clean exception — that exception path is exactly
+    # the per-item failure we want to assert on. (A truncated/garbage .jpg
+    # would risk FFmpeg hanging on `-loop 1` waiting for image bytes; the HEIC
+    # route fails before FFmpeg is invoked at all.)
+    bad = src / "2026-05-23 12-99-00 - corrupt.heic"
+    bad.write_bytes(b"this is not a heic container" * 32)
+    out = tmp_path / "out.mp4"
+
+    rc, events, _ = _run_ipc(
+        [
+            "--dir", str(src),
+            "-o", str(out),
+            "--slide-duration", "1",
+            "--fade-duration", "0.2",
+            "--fps", "24",
+            "--batch-size", "2",
+            "--workers", "1",
+        ],
+        cwd=tmp_path,
+    )
+
+    # The render completes despite the bad file.
+    assert rc == 0, f"render should complete (rc=0) despite bad input, got {rc}"
+    types = [e["type"] for e in events]
+    assert types[-1] == "complete", f"expected complete last, got {types[-5:]}"
+
+    # At least one item_failed event with the documented shape.
+    failures = [e for e in events if e["type"] == "item_failed"]
+    assert failures, "expected at least one item_failed event for the corrupt input"
+    f = failures[0]
+    for field in ("v", "t", "type", "phase", "path", "reason"):
+        assert field in f, f"item_failed missing {field}: {f}"
+    assert f["v"] == 1
+    # The phase should be one of the documented per-item phases (currently
+    # only "images" emits item_failed).
+    assert f["phase"] == "images"
+    assert isinstance(f["path"], str) and f["path"]
+    assert isinstance(f["reason"], str) and f["reason"]
+    # `detail` is optional but, when present, should be a string.
+    if "detail" in f:
+        assert isinstance(f["detail"], str)
+
+    # The complete event reports the skip count, and it matches the number of
+    # item_failed events emitted (canonical summary vs. per-item stream).
+    done = events[-1]
+    assert "items_skipped" in done, "complete must carry items_skipped (S4 contract)"
+    assert done["items_skipped"] >= 1
+    assert done["items_skipped"] == len(failures), (
+        f"items_skipped ({done['items_skipped']}) should equal item_failed count "
+        f"({len(failures)})"
+    )
+
+    # The output file still exists — the render produced a valid slideshow
+    # from the remaining good inputs.
+    assert out.exists(), "render should produce output even when items are skipped"
+    assert done["outputs"][0]["size_bytes"] > 0
+
+
 def _list_ffmpeg_pids() -> set[int]:
     """PIDs of currently-running ffmpeg processes (for orphan detection)."""
     out = subprocess.run(["pgrep", "-x", "ffmpeg"], capture_output=True, text=True)
