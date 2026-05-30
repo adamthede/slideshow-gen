@@ -93,17 +93,23 @@ function uniqueYears(
   histogram: Array<{ month: string; count: number }>,
 ): Array<{ year: string; x: number }> {
   const seen = new Set<string>();
-  const ticks: Array<{ year: string; x: number }> = [];
+  const all: Array<{ year: string; x: number }> = [];
   const step = 100 / histogram.length;
   histogram.forEach((bucket, i) => {
     const year = bucket.month.slice(0, 4);
     if (!seen.has(year)) {
       seen.add(year);
       // Center the tick within the year's first month bucket.
-      ticks.push({ year, x: i * step + step / 2 });
+      all.push({ year, x: i * step + step / 2 });
     }
   });
-  return ticks;
+
+  // Thin labels for long spans so they don't collide. Roughly 10
+  // labels fit comfortably across the viewport width; stride scales
+  // up beyond that. Cap at 50yr already enforced by the sidecar.
+  const maxLabels = 10;
+  const stride = Math.max(1, Math.ceil(all.length / maxLabels));
+  return all.filter((_, i) => i % stride === 0);
 }
 
 function formatDate(iso: string): string {
