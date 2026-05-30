@@ -43,6 +43,15 @@ from .overlay import generate_overlay_filters
 def _month_histogram(
     parsed_dates: list[datetime], earliest: datetime, latest: datetime
 ) -> list[dict[str, Any]]:
+    # Cap the span at 50 years (600 months). Corrupt EXIF dates (year 9999,
+    # year 0001) occur in real photo libraries and would otherwise produce
+    # tens of thousands of buckets — bloating the IPC payload and freezing
+    # the frontend when it renders an SVG <rect> per bucket. On overflow we
+    # return [], which makes the UI fall back to the plain date-range string.
+    span_months = (latest.year - earliest.year) * 12 + (latest.month - earliest.month)
+    if span_months > 600:
+        return []
+
     # Bucket parsed_dates by YYYY-MM, then zero-fill every month from
     # earliest to latest so the frontend timeline shows true gaps.
     counts: dict[str, int] = {}

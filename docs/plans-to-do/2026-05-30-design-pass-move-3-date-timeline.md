@@ -45,11 +45,13 @@ log to narrative."
 ### In scope
 - `src/slideshow_gen/pipeline.py`: compute month-bucket histogram alongside
   `date_range`, pass to `reporter.discovery_complete`.
-- `src/slideshow_gen/events.py`: accept `date_histogram` kwarg on both the
-  base `EventReporter` and `IPCReporter`; serialize as
-  `[{month, count}, ...]` only when non-empty.
-- `tests/test_ipc_protocol.py`: assert `date_histogram` shape on the full
-  render lifecycle test.
+- `src/slideshow_gen/events.py`: accept `date_histogram` kwarg on the
+  base `Reporter` interface, the `ConsoleReporter`, and the
+  `JsonReporter`; serialize as `[{month, count}, ...]` only when
+  non-empty.
+- `tests/test_ipc_protocol.py`: assert `date_histogram` shape on
+  `test_ipc_estimate_only_lifecycle` (the existing test that already
+  exercises the `discovery_complete` payload).
 - `docs/sidecar-protocol.md`: document the new field.
 - `desktop/src/lib/sidecar-events.ts`: add `date_histogram` to
   `DiscoveryCompleteEvent`.
