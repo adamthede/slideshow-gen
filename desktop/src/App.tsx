@@ -1177,14 +1177,18 @@ function App() {
 
         {discovery && (() => {
           const gpsPct = discovery.gps_coverage_percent;
-          const dupes = discovery.duplicates_detected ?? 0;
           const gpsTone: SummaryStatTone =
             gpsPct === undefined
               ? "muted"
               : gpsPct < 50
               ? "muted"
               : "neutral";
-          const dupesTone: SummaryStatTone = dupes > 0 ? "accent" : "muted";
+          const dupesTone: SummaryStatTone =
+            discovery.duplicates_detected === undefined
+              ? "muted"
+              : discovery.duplicates_detected > 0
+              ? "accent"
+              : "neutral";
           return (
             <section
               aria-labelledby="summary-heading"
