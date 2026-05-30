@@ -1,7 +1,8 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { open, save } from "@tauri-apps/plugin-dialog";
-import { revealItemInDir } from "@tauri-apps/plugin-opener";
+import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
+import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -174,8 +175,327 @@ function settingsSummary(s: RenderSettings): string {
   return parts.join(" · ");
 }
 
+/** Slideshow-runtime duration formatter: mm:ss, or h:mm:ss past an hour. */
+function formatClockDuration(seconds: number): string {
+  if (!Number.isFinite(seconds) || seconds < 0) return "—";
+  const total = Math.round(seconds);
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const s = total % 60;
+  const mm = m.toString().padStart(h > 0 ? 2 : 1, "0");
+  const ss = s.toString().padStart(2, "0");
+  return h > 0 ? `${h}:${mm}:${ss}` : `${mm}:${ss}`;
+}
+
+/**
+ * Big numeric value + small uppercase label, Feltron-style. No icons,
+ * generous whitespace. Used inside the result view's report grid.
+ */
+function ReportStat({
+  label,
+  value,
+  sub,
+}: {
+  label: string;
+  value: string;
+  sub?: string;
+}) {
+  return (
+    <div className="flex flex-col gap-1">
+      <span className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+        {label}
+      </span>
+      <span className="text-3xl font-semibold tabular-nums leading-none">
+        {value}
+      </span>
+      {sub && (
+        <span className="text-xs text-muted-foreground tabular-nums">
+          {sub}
+        </span>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Post-render result view: Feltron-style stat grid, in-app `<video>` preview,
+ * and primary actions. Replaces the old "Render complete" success card.
+ *
+ * Stats are derived from data already in scope (no IPC change required):
+ *   - Duration  ← `estimate.duration_s` (deterministic slideshow runtime
+ *                 computed from the manifest in `estimate.py`; equals the
+ *                 actual output length within encoder rounding)
+ *   - File size ← `complete.outputs[0].size_bytes`
+ *   - Items     ← `discovery.images` / `discovery.videos`
+ *   - Skipped   ← `complete.items_skipped` (rendered only when > 0)
+ *   - Settings  ← local `settings` snapshot (matches what the engine ran with)
+ *   - Render    ← `complete.elapsed_s` (wall-clock time the render took)
+ */
+function ResultView({
+  complete,
+  discovery,
+  estimate,
+  warnings,
+  settings,
+  onRenderAgain,
+  onNewSlideshow,
+  running,
+}: {
+  complete: NonNullable<ReturnType<typeof useSidecar>["state"]["complete"]>;
+  discovery: ReturnType<typeof useSidecar>["state"]["discovery"];
+  estimate: ReturnType<typeof useSidecar>["state"]["estimate"];
+  warnings: ReturnType<typeof useSidecar>["state"]["warnings"];
+  settings: RenderSettings;
+  onRenderAgain: () => void;
+  onNewSlideshow: () => void;
+  running: boolean;
+}) {
+  // Primary output is the first entry — chunked output is a power-user path
+  // we don't currently expose in the UI; the rest are still surfaced in the
+  // file list below.
+  const primary = complete.outputs[0];
+  const skipped = complete.items_skipped ?? 0;
+  // Slideshow runtime: prefer the engine's estimate (deterministic from the
+  // manifest) when available; fall back to elapsed wall time if not (shouldn't
+  // happen on the real render path, but the result view shouldn't crash on a
+  // partial state — e.g. dev hot-reload preserving `complete` without estimate).
+  const slideshowDuration = estimate?.duration_s ?? complete.elapsed_s;
+
+  const itemCount = useMemo(() => {
+    if (!discovery) return null;
+    const skippedImages = Math.min(skipped, discovery.images);
+    const skippedVideos = Math.min(
+      Math.max(0, skipped - discovery.images),
+      discovery.videos,
+    );
+    const renderedImages = Math.max(0, discovery.images - skippedImages);
+    const renderedVideos = Math.max(0, discovery.videos - skippedVideos);
+    const parts: string[] = [];
+    parts.push(`${renderedImages.toLocaleString()} image${renderedImages === 1 ? "" : "s"}`);
+    if (discovery.videos > 0) {
+      parts.push(
+        `${renderedVideos.toLocaleString()} video${renderedVideos === 1 ? "" : "s"}`,
+      );
+    }
+    return parts.join(" + ");
+  }, [discovery, skipped]);
+
+  // Convert the absolute output path into a Tauri asset-protocol URL so the
+  // webview `<video>` element can stream it. The asset protocol's static
+  // scope is just $TEMP/**; the output file is allowed dynamically below
+  // via the `allow_output_file` Tauri command before the URL is exposed.
+  const videoSrc = useMemo(
+    () => (primary ? convertFileSrc(primary.path) : ""),
+    [primary],
+  );
+
+  // Extend the asset-protocol scope to include this specific output file,
+  // then expose the cache-busted URL. Until the scope is extended, the URL
+  // is empty so the `<video>` element doesn't attempt a load that would
+  // get blocked.
+  const [videoAllowed, setVideoAllowed] = useState(false);
+  useEffect(() => {
+    let active = true;
+    if (!primary?.path) {
+      setVideoAllowed(false);
+      return;
+    }
+    setVideoAllowed(false);
+    invoke<void>("allow_output_file", { path: primary.path })
+      .then(() => {
+        if (active) setVideoAllowed(true);
+      })
+      .catch((err) => {
+        if (active) {
+          console.error("[marquee] allow_output_file failed:", err);
+        }
+      });
+    return () => {
+      active = false;
+    };
+  }, [primary?.path]);
+
+  // Cache-bust the asset URL per render so a same-named file from a previous
+  // run isn't served from the webview cache. (The user can name two renders
+  // the same path, or "Render Again" can overwrite.)
+  const cacheBustedSrc = useMemo(
+    () =>
+      videoAllowed && videoSrc
+        ? `${videoSrc}?t=${Math.floor(complete.t)}`
+        : "",
+    [videoAllowed, videoSrc, complete.t],
+  );
+
+  function handleReveal(path: string) {
+    revealItemInDir(path).catch((err) =>
+      console.error("[marquee] revealItemInDir failed:", err),
+    );
+  }
+
+  function handleQuickTime(path: string) {
+    invoke("open_in_quicktime", { path }).catch((err) =>
+      console.error("[marquee] open_in_quicktime failed:", err),
+    );
+  }
+
+  return (
+    <Card className="border-primary">
+      <CardHeader>
+        <CardTitle className="text-2xl">Render complete</CardTitle>
+        <CardDescription>
+          Your slideshow is ready. Preview it below, reveal it in Finder, or
+          open it in QuickTime.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-8">
+        {/* Feltron-influenced stat grid: large numerals, small uppercase
+            labels, generous whitespace, no icons. */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-x-6 gap-y-8 border-y py-6">
+          <ReportStat
+            label="Duration"
+            value={formatClockDuration(slideshowDuration)}
+          />
+          <ReportStat
+            label="File size"
+            value={primary ? formatSize(primary.size_bytes) : "—"}
+          />
+          <ReportStat
+            label="Items"
+            value={itemCount ?? "—"}
+          />
+          <ReportStat
+            label="Render time"
+            value={formatDuration(complete.elapsed_s)}
+          />
+          {skipped > 0 && (
+            <ReportStat
+              label="Items skipped"
+              value={skipped.toLocaleString()}
+              sub={skipped === 1 ? "1 file could not be processed" : `${skipped} files could not be processed`}
+            />
+          )}
+          <div
+            className={
+              "flex flex-col gap-1 " +
+              (skipped > 0 ? "col-span-2 md:col-span-3" : "col-span-2 md:col-span-4")
+            }
+          >
+            <span className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+              Settings
+            </span>
+            <span className="text-sm leading-relaxed">
+              {settingsSummary(settings)}
+            </span>
+          </div>
+        </div>
+
+        {/* In-app video preview via Tauri's asset protocol. */}
+        {primary && (
+          <div className="flex justify-center">
+            <video
+              key={cacheBustedSrc}
+              src={cacheBustedSrc}
+              controls
+              preload="metadata"
+              className="w-full max-h-[60vh] rounded-md bg-black shadow-sm"
+            />
+          </div>
+        )}
+
+        {/* Primary action row. */}
+        <div className="flex flex-wrap items-center gap-3">
+          {primary && (
+            <>
+              <Button onClick={() => handleReveal(primary.path)}>
+                Reveal in Finder
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => handleQuickTime(primary.path)}
+              >
+                Open in QuickTime
+              </Button>
+            </>
+          )}
+          <Button
+            variant="outline"
+            onClick={onRenderAgain}
+            disabled={running}
+          >
+            Render again
+          </Button>
+          <Button
+            variant="ghost"
+            onClick={onNewSlideshow}
+            disabled={running}
+          >
+            New slideshow
+          </Button>
+        </div>
+
+        {/* Output file path(s) — primary always shown so the user has
+            the destination in front of them; extras (chunked output) listed
+            beneath. */}
+        {primary && (
+          <div className="text-xs font-mono text-muted-foreground bg-muted/40 rounded-md px-3 py-2 break-all">
+            {primary.path}
+          </div>
+        )}
+        {complete.outputs.length > 1 && (
+          <ul className="space-y-1">
+            {complete.outputs.slice(1).map((o) => (
+              <li
+                key={o.path}
+                className="flex items-center justify-between gap-3 text-xs bg-muted/40 rounded-md px-3 py-2"
+              >
+                <span className="font-mono truncate" title={o.path}>
+                  {o.path}
+                </span>
+                <span className="font-mono text-muted-foreground shrink-0">
+                  {formatSize(o.size_bytes)}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+
+        {/* Skipped-items detail (expandable) — only when there were any. */}
+        {warnings.length > 0 && (
+          <details className="text-xs bg-muted/40 rounded-md px-3 py-2">
+            <summary className="cursor-pointer text-muted-foreground hover:text-foreground">
+              {warnings.length} item{warnings.length === 1 ? "" : "s"} skipped
+              {complete.items_skipped !== undefined &&
+              complete.items_skipped !== warnings.length
+                ? ` (engine reported ${complete.items_skipped})`
+                : ""}
+            </summary>
+            <ul className="mt-2 space-y-1 font-mono">
+              {warnings.map((w, i) => {
+                const name = w.path.split("/").pop() ?? w.path;
+                return (
+                  <li
+                    key={`${w.path}-${i}`}
+                    className="flex items-start justify-between gap-3"
+                    title={w.detail ?? w.path}
+                  >
+                    <span className="truncate text-foreground">{name}</span>
+                    <span className="shrink-0 text-muted-foreground">
+                      {w.reason}
+                    </span>
+                  </li>
+                );
+              })}
+            </ul>
+          </details>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 function App() {
-  const { state, start, startRender, cancelRender, reset } = useSidecar();
+  const { state, start, startRender, cancelRender, reset, clearCompletion } =
+    useSidecar();
   const [settings, setSettings] = useSettings();
   const [folders, setFolders] = useState<string[]>([]);
   const [dragging, setDragging] = useState(false);
@@ -795,83 +1115,23 @@ function App() {
         )}
 
         {complete && (
-          <Card className="border-primary">
-            <CardHeader>
-              <CardTitle>Render complete</CardTitle>
-              <CardDescription>
-                Finished in {formatDuration(complete.elapsed_s)}.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-2">
-              {complete.outputs.map((o) => (
-                <div
-                  key={o.path}
-                  className="flex items-center justify-between gap-3 text-xs bg-muted/40 rounded-md px-3 py-2"
-                >
-                  <span className="font-mono truncate" title={o.path}>
-                    {truncateMiddle(o.path)}
-                  </span>
-                  <div className="flex items-center gap-3 shrink-0">
-                    <span className="font-mono text-muted-foreground">
-                      {formatSize(o.size_bytes)}
-                    </span>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() =>
-                        revealItemInDir(o.path).catch((err) =>
-                          console.error("[marquee] reveal failed:", err),
-                        )
-                      }
-                    >
-                      Reveal in Finder
-                    </Button>
-                  </div>
-                </div>
-              ))}
-              {warnings.length > 0 && (
-                <details className="text-xs bg-muted/40 rounded-md px-3 py-2">
-                  <summary className="cursor-pointer text-muted-foreground hover:text-foreground">
-                    {warnings.length} item{warnings.length === 1 ? "" : "s"} skipped
-                    {complete.items_skipped !== undefined && complete.items_skipped !== warnings.length
-                      ? ` (engine reported ${complete.items_skipped})`
-                      : ""}
-                  </summary>
-                  <ul className="mt-2 space-y-1 font-mono">
-                    {warnings.map((w, i) => {
-                      const name = w.path.split("/").pop() ?? w.path;
-                      return (
-                        <li
-                          key={`${w.path}-${i}`}
-                          className="flex items-start justify-between gap-3"
-                          title={w.detail ?? w.path}
-                        >
-                          <span className="truncate text-foreground">{name}</span>
-                          <span className="shrink-0 text-muted-foreground">{w.reason}</span>
-                        </li>
-                      );
-                    })}
-                  </ul>
-                </details>
-              )}
-              <div className="flex items-center gap-3 flex-wrap pt-2">
-                <Button onClick={runRender} disabled={running}>
-                  Render again
-                </Button>
-                <Button
-                  variant="outline"
-                  onClick={resetAll}
-                  disabled={running}
-                >
-                  New slideshow
-                </Button>
-                <span className="text-xs text-muted-foreground">
-                  Render again uses the same folders &amp; settings · New
-                  slideshow clears everything.
-                </span>
-              </div>
-            </CardContent>
-          </Card>
+          <ResultView
+            complete={complete}
+            discovery={discovery}
+            estimate={estimate}
+            warnings={warnings}
+            settings={settings}
+            onRenderAgain={() => {
+              // Return to the pre-render Summary/Estimates view. Clear
+              // terminal state (complete, warnings, progress) but keep the
+              // discovery + estimate so the Summary cards remain visible
+              // and the Render button is ready. Folders/settings/output
+              // path stay on the App-level state — they were never reset.
+              clearCompletion();
+            }}
+            onNewSlideshow={resetAll}
+            running={running}
+          />
         )}
 
         {cancelled && (

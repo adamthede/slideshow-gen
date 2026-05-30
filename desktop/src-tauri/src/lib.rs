@@ -1,7 +1,10 @@
 mod sidecar;
 
+use std::process::Command;
+
 use serde::Deserialize;
 use sidecar::{cancel_sidecar, spawn_sidecar, SidecarState};
+use tauri::Manager;
 
 /// Render settings the frontend can override. Each field is optional —
 /// `None` means "let the CLI use its default", so the Rust shell never
@@ -168,6 +171,55 @@ async fn start_render(
     spawn_sidecar(&app, args)
 }
 
+/// Extend the asset-protocol scope at runtime to include a specific file,
+/// so the webview `<video>` element can load it via `convertFileSrc`.
+///
+/// Replaces the static `$HOME/**` scope entry that previously exposed every
+/// file under the user's home directory. The frontend invokes this once per
+/// completed render with the absolute output path before mounting `<video>`.
+#[tauri::command]
+fn allow_output_file(app: tauri::AppHandle, path: String) -> Result<(), String> {
+    if path.trim().is_empty() {
+        return Err("No path provided.".into());
+    }
+    // Resolve symlinks before the extension check so a symlink named
+    // `render.mp4` pointing at e.g. `~/.ssh/id_rsa` can't slip past it.
+    let path_buf = std::fs::canonicalize(std::path::Path::new(&path))
+        .map_err(|e| format!("Failed to canonicalize path: {e}"))?;
+    let has_mp4_ext = path_buf
+        .extension()
+        .and_then(|s| s.to_str())
+        .is_some_and(|s| s.eq_ignore_ascii_case("mp4"));
+    if !has_mp4_ext {
+        return Err("Only MP4 outputs may be exposed to the webview.".into());
+    }
+    app.asset_protocol_scope()
+        .allow_file(&path_buf)
+        .map_err(|e| format!("Failed to extend asset protocol scope: {e}"))
+}
+
+/// Open the file in QuickTime Player (`open -a "QuickTime Player" "$path"`).
+///
+/// macOS-only by design (see PRD NFR6). If QuickTime is missing or refuses
+/// to open the file, the error from `open` is bubbled up.
+#[tauri::command]
+fn open_in_quicktime(path: String) -> Result<(), String> {
+    if path.trim().is_empty() {
+        return Err("No path provided.".into());
+    }
+    Command::new("/usr/bin/open")
+        .args(["-a", "QuickTime Player", "--", &path])
+        .status()
+        .map_err(|e| format!("Failed to invoke /usr/bin/open: {e}"))
+        .and_then(|status| {
+            if status.success() {
+                Ok(())
+            } else {
+                Err(format!("/usr/bin/open -a QuickTime Player exited with status {status}"))
+            }
+        })
+}
+
 /// Cancel the in-flight render. Sends SIGTERM to the sidecar so the engine can
 /// reap its FFmpeg children and clean up its temp dir before exiting; a SIGKILL
 /// escalation fires only if it doesn't exit within the grace period. The
@@ -185,7 +237,13 @@ pub fn run() {
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
         .manage(SidecarState::default())
-        .invoke_handler(tauri::generate_handler![start_scan, start_render, cancel_render])
+        .invoke_handler(tauri::generate_handler![
+            start_scan,
+            start_render,
+            cancel_render,
+            allow_output_file,
+            open_in_quicktime
+        ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
