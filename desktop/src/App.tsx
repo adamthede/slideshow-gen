@@ -12,6 +12,8 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { RenderPipeline } from "@/components/ui/render-pipeline";
+import { SummaryStat, type SummaryStatTone } from "@/components/SummaryStat";
+import { Copy, Film, Images, MapPin } from "lucide-react";
 import { useSidecar } from "@/hooks/useSidecar";
 import { deriveDefaultBaseName } from "@/lib/output-name";
 import type { SidecarEvent } from "@/lib/sidecar-events";
@@ -1173,47 +1175,84 @@ function App() {
           </Card>
         )}
 
-        {discovery && (
-          <Card>
-            <CardHeader>
-              <CardTitle>Summary</CardTitle>
-              <CardDescription>
-                What we found across the selected folder{folders.length === 1 ? "" : "s"}.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="grid grid-cols-2 md:grid-cols-4 gap-6">
-              <Stat label="Images" value={discovery.images.toLocaleString()} />
-              <Stat label="Videos" value={discovery.videos.toLocaleString()} />
-              <Stat
-                label="GPS coverage"
-                value={
-                  discovery.gps_coverage_percent !== undefined
-                    ? `${discovery.gps_coverage_percent.toFixed(0)}%`
-                    : "—"
-                }
-              />
-              <Stat
-                label="Duplicates"
-                value={
-                  discovery.duplicates_detected !== undefined
-                    ? discovery.duplicates_detected.toLocaleString()
-                    : "—"
-                }
-              />
-              {discovery.date_range && (
-                <div className="col-span-2 md:col-span-4 flex flex-col gap-1 pt-2 border-t">
-                  <span className="text-xs uppercase tracking-wide text-muted-foreground">
-                    Date range
-                  </span>
-                  <span className="text-sm font-mono">
-                    {formatDate(discovery.date_range.earliest)} →{" "}
-                    {formatDate(discovery.date_range.latest)}
-                  </span>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        )}
+        {discovery && (() => {
+          const gpsPct = discovery.gps_coverage_percent;
+          const gpsTone: SummaryStatTone =
+            gpsPct === undefined
+              ? "muted"
+              : gpsPct < 50
+              ? "muted"
+              : "neutral";
+          const dupesTone: SummaryStatTone =
+            discovery.duplicates_detected === undefined
+              ? "muted"
+              : discovery.duplicates_detected > 0
+              ? "accent"
+              : "neutral";
+          return (
+            <section
+              aria-labelledby="summary-heading"
+              className="flex flex-col gap-5 px-1 py-2"
+            >
+              <div className="flex flex-col gap-1">
+                <h2
+                  id="summary-heading"
+                  className="text-lg font-semibold tracking-tight"
+                >
+                  Summary
+                </h2>
+                <p className="text-sm text-muted-foreground">
+                  What we found across the selected folder
+                  {folders.length === 1 ? "" : "s"}.
+                </p>
+              </div>
+              <div className="h-px bg-border" role="separator" />
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+                <SummaryStat
+                  icon={Images}
+                  label="Images"
+                  value={discovery.images.toLocaleString()}
+                  tone="neutral"
+                />
+                <SummaryStat
+                  icon={Film}
+                  label="Videos"
+                  value={discovery.videos.toLocaleString()}
+                  tone="neutral"
+                />
+                <SummaryStat
+                  icon={MapPin}
+                  label="GPS coverage"
+                  value={
+                    gpsPct !== undefined ? `${gpsPct.toFixed(0)}%` : "—"
+                  }
+                  tone={gpsTone}
+                />
+                <SummaryStat
+                  icon={Copy}
+                  label="Duplicates"
+                  value={
+                    discovery.duplicates_detected !== undefined
+                      ? discovery.duplicates_detected.toLocaleString()
+                      : "—"
+                  }
+                  tone={dupesTone}
+                />
+                {discovery.date_range && (
+                  <div className="col-span-2 md:col-span-4 flex flex-col gap-1 pt-2 border-t border-border">
+                    <span className="text-xs uppercase tracking-wide text-muted-foreground">
+                      Date range
+                    </span>
+                    <span className="text-sm font-mono">
+                      {formatDate(discovery.date_range.earliest)} →{" "}
+                      {formatDate(discovery.date_range.latest)}
+                    </span>
+                  </div>
+                )}
+              </div>
+            </section>
+          );
+        })()}
 
         {estimate && (
           <Card>

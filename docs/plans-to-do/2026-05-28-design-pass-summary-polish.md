@@ -1,7 +1,7 @@
 ---
 title: Design pass #2/#4 — Summary section polish (de-card + inline glyphs)
-status: To Do
-linked_pr: ""
+status: QA Needed
+linked_pr: "https://github.com/adamthede/slideshow-gen/pull/9"
 ---
 
 # Design pass: Summary section polish
