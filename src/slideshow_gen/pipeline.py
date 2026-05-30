@@ -12,7 +12,9 @@ import signal
 import subprocess
 import tempfile
 import time
+from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 import click
 
@@ -36,6 +38,29 @@ from .ffmpeg import (
 )
 from .memutil import auto_worker_count, log_memory_status
 from .overlay import generate_overlay_filters
+
+
+def _month_histogram(
+    parsed_dates: list[datetime], earliest: datetime, latest: datetime
+) -> list[dict[str, Any]]:
+    # Bucket parsed_dates by YYYY-MM, then zero-fill every month from
+    # earliest to latest so the frontend timeline shows true gaps.
+    counts: dict[str, int] = {}
+    for d in parsed_dates:
+        key = f"{d.year:04d}-{d.month:02d}"
+        counts[key] = counts.get(key, 0) + 1
+
+    out: list[dict[str, Any]] = []
+    year, month = earliest.year, earliest.month
+    end_year, end_month = latest.year, latest.month
+    while (year, month) <= (end_year, end_month):
+        key = f"{year:04d}-{month:02d}"
+        out.append({"month": key, "count": counts.get(key, 0)})
+        month += 1
+        if month > 12:
+            year += 1
+            month = 1
+    return out
 
 
 class RenderPipeline:
@@ -177,12 +202,14 @@ class RenderPipeline:
         # and the doc — EXIF parsed_dates carry time components that we
         # intentionally drop here.
         date_range = None
+        date_histogram: list[dict[str, Any]] | None = None
         if items:
             parsed_dates = [i.parsed_date for i in items if i.parsed_date]
             if parsed_dates:
                 earliest = min(parsed_dates)
                 latest = max(parsed_dates)
                 date_range = (earliest.date().isoformat(), latest.date().isoformat())
+                date_histogram = _month_histogram(parsed_dates, earliest, latest)
 
         # Compute GPS coverage % — explicit None check; (0.0, 0.0) is a
         # valid coordinate (Equator + Prime Meridian intersection).
@@ -213,6 +240,7 @@ class RenderPipeline:
             date_range=date_range,
             gps_coverage_percent=gps_coverage,
             duplicates_detected=dupes_detected,
+            date_histogram=date_histogram,
         )
 
         # Pre-render estimate (deterministic, no FFmpeg).

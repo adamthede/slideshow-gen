@@ -114,6 +114,10 @@ def test_ipc_estimate_only_lifecycle(tmp_path):
     # duplicates_detected always present after items found; distinct synthetic
     # images → 0.
     assert dc["duplicates_detected"] == 0
+    # date_histogram present when date_range is — month-bucketed counts
+    # covering every month from earliest to latest (zero-filled).
+    assert "date_histogram" in dc
+    assert dc["date_histogram"] == [{"month": "2026-05", "count": 3}]
 
     # estimate shape
     est = next(e for e in events if e["type"] == "estimate")

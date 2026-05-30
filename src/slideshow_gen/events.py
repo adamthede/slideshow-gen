@@ -40,6 +40,7 @@ class Reporter(ABC):
         date_range: tuple[str, str] | None = None,
         gps_coverage_percent: float | None = None,
         duplicates_detected: int | None = None,
+        date_histogram: list[dict[str, Any]] | None = None,
     ) -> None: ...
 
     @abstractmethod
@@ -109,6 +110,7 @@ class ConsoleReporter(Reporter):
         date_range: tuple[str, str] | None = None,
         gps_coverage_percent: float | None = None,
         duplicates_detected: int | None = None,
+        date_histogram: list[dict[str, Any]] | None = None,
     ) -> None:
         msg = f"  Found {images} images and {videos} videos."
         if date_range:
@@ -237,6 +239,7 @@ class JsonReporter(Reporter):
         date_range: tuple[str, str] | None = None,
         gps_coverage_percent: float | None = None,
         duplicates_detected: int | None = None,
+        date_histogram: list[dict[str, Any]] | None = None,
     ) -> None:
         payload: dict[str, Any] = {"images": images, "videos": videos}
         if date_range:
@@ -245,6 +248,8 @@ class JsonReporter(Reporter):
             payload["gps_coverage_percent"] = round(gps_coverage_percent, 1)
         if duplicates_detected is not None:
             payload["duplicates_detected"] = duplicates_detected
+        if date_histogram:
+            payload["date_histogram"] = date_histogram
         self._emit("discovery_complete", **payload)
 
     def estimate(
