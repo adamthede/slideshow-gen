@@ -107,6 +107,15 @@ Convenience event emitted at the end of `discovery` with parsed counts and metad
 - `date_range`: Object with `earliest` and `latest` ISO date strings. **Omitted** when no parsed dates were found during discovery — embedders must handle absence.
 - `gps_coverage_percent`: Percentage of items with valid GPS coordinates (0–100). **Always present** when items were discovered; `0.0` means no GPS data, not "field missing".
 - `duplicates_detected`: Count of duplicate items detected via content hash. **Always present** when items were discovered; `0` means no duplicates found. *Note:* the engine reports duplicates but does not currently remove them from the render — the field name reflects detection, not removal.
+- `date_histogram`: Optional list of `{"month": "YYYY-MM", "count": N}` entries spanning every month from the earliest to the latest parsed date, zero-filled for months with no items. **Present whenever `date_range` is present.** Intended for rendering a density timeline of the input set. Items without a parsed date are excluded (same rule as `date_range`).
+
+```json
+"date_histogram": [
+  {"month": "2024-06", "count": 12},
+  {"month": "2024-07", "count": 0},
+  {"month": "2024-08", "count": 47}
+]
+```
 
 ### `estimate`
 

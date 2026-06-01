@@ -48,6 +48,12 @@ export interface DiscoveryCompleteEvent extends BaseEvent {
   date_range?: { earliest: string; latest: string };
   gps_coverage_percent?: number;
   duplicates_detected?: number;
+  /**
+   * Month-bucketed density histogram. One entry per month from
+   * `date_range.earliest` to `date_range.latest`, zero-filled.
+   * Present whenever `date_range` is present.
+   */
+  date_histogram?: Array<{ month: string; count: number }>;
 }
 
 export interface EstimateEvent extends BaseEvent {

@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/card";
 import { RenderPipeline } from "@/components/ui/render-pipeline";
 import { SummaryStat, type SummaryStatTone } from "@/components/SummaryStat";
+import { Timeline } from "@/components/Timeline";
 import { Copy, Film, Images, MapPin } from "lucide-react";
 import { useSidecar } from "@/hooks/useSidecar";
 import { deriveDefaultBaseName } from "@/lib/output-name";
@@ -1239,14 +1240,25 @@ function App() {
                   tone={dupesTone}
                 />
                 {discovery.date_range && (
-                  <div className="col-span-2 md:col-span-4 flex flex-col gap-1 pt-2 border-t border-border">
-                    <span className="text-xs uppercase tracking-wide text-muted-foreground">
-                      Date range
-                    </span>
-                    <span className="text-sm font-mono">
-                      {formatDate(discovery.date_range.earliest)} →{" "}
-                      {formatDate(discovery.date_range.latest)}
-                    </span>
+                  <div className="col-span-2 md:col-span-4">
+                    {discovery.date_histogram &&
+                    discovery.date_histogram.length > 0 ? (
+                      <Timeline
+                        histogram={discovery.date_histogram}
+                        earliest={discovery.date_range.earliest}
+                        latest={discovery.date_range.latest}
+                      />
+                    ) : (
+                      <div className="flex flex-col gap-1 pt-2 border-t border-border">
+                        <span className="text-xs uppercase tracking-wide text-muted-foreground">
+                          Date range
+                        </span>
+                        <span className="text-sm font-mono">
+                          {formatDate(discovery.date_range.earliest)} →{" "}
+                          {formatDate(discovery.date_range.latest)}
+                        </span>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
