@@ -1,8 +1,6 @@
 ---
 title: Design pass — Move #3 (date-range timeline + density histogram)
-status: Done
-completed: 2026-05-31
-linked_pr: https://github.com/adamthede/slideshow-gen/pull/11
+status: In Progress
 ---
 
 # Design pass — Move #3: date-range timeline + density histogram
