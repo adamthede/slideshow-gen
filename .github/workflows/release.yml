@@ -155,7 +155,10 @@ jobs:
         env:
           APPLE_SIGNING_IDENTITY: ${{ env.APPLE_SIGNING_IDENTITY }}
         run: |
-          set -euxo pipefail
+          # No `set -x` here: this step runs `security unlock-keychain -p
+          # "$KEYCHAIN_PASSWORD"`, and xtrace would echo the keychain password
+          # into the CI logs. Keep errexit/nounset/pipefail only.
+          set -euo pipefail
           security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
           SIDECAR="desktop/src-tauri/binaries/slideshow-gen-aarch64-apple-darwin"
           codesign \
