@@ -65,9 +65,17 @@ def test_ffmpeg_falls_back_to_path_when_override_empty(monkeypatch):
     assert ffmpeg_binary() == "ffmpeg"
 
 
-def test_tilde_in_override_is_expanded(monkeypatch, bundled_ffmpeg):
-    # Sanity: ``~`` expansion shouldn't defeat the existence check.
-    monkeypatch.setenv(FFMPEG_ENV_VAR, str(bundled_ffmpeg))
+def test_tilde_in_override_is_expanded(monkeypatch, tmp_path):
+    # A ``~/…`` override must be expanded against HOME and still pass the
+    # existence check (the resolver calls ``Path(...).expanduser()``).
+    fake_home = tmp_path / "fake_home"
+    fake_home.mkdir()
+    binary = fake_home / "ffmpeg"
+    binary.write_text("#!/bin/sh\n")
+    binary.chmod(0o755)
+
+    monkeypatch.setenv("HOME", str(fake_home))
+    monkeypatch.setenv(FFMPEG_ENV_VAR, "~/ffmpeg")
     resolved = ffmpeg_binary()
-    assert resolved == str(bundled_ffmpeg)
+    assert resolved == str(binary)
     assert "~" not in resolved

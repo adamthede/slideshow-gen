@@ -25,7 +25,11 @@ def check_ffmpeg() -> bool:
             [ffmpeg_binary(), "-version"], capture_output=True, text=True, timeout=10,
         )
         return result.returncode == 0
-    except (FileNotFoundError, subprocess.TimeoutExpired):
+    except (OSError, subprocess.TimeoutExpired):
+        # OSError (superclass of FileNotFoundError) also covers a bundled
+        # binary that exists but isn't executable (PermissionError) or isn't a
+        # valid Mach-O (ENOEXEC) — treat any of these as "FFmpeg unavailable"
+        # rather than crashing the pre-render check.
         return False
 
 
