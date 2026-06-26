@@ -1,6 +1,7 @@
 ---
 title: Epic 5.S2 — Code-signing hygiene (sign all nested binaries, deep-verify gate)
-status: "QA Needed"
+status: "Done"
+completed: 2026-06-26
 linked_pr: "https://github.com/adamthede/slideshow-gen/pull/13"
 ---
 
