@@ -46,6 +46,21 @@ trap 'rm -rf "$WORK"' EXIT
 log() { echo "[vendor-ffmpeg] $*"; }
 fail() { echo "[vendor-ffmpeg] ERROR: $*" >&2; exit 1; }
 
+# Supply-chain guard. This script downloads a binary and then EXECUTES it
+# (`-version`/`-encoders`/... guards). In CI that runner also holds the Apple
+# Developer ID cert + passwords, so executing an unverified binary from a
+# third-party host would be an arbitrary-code-execution / supply-chain risk if
+# that host were compromised. In CI we therefore REFUSE to proceed unless both
+# checksums are pinned (which also makes releases reproducible). Locally
+# (no CI) checksums stay optional with a warning. Override the gate explicitly
+# with REQUIRE_PINNED_SHA256=0 only for local experimentation.
+REQUIRE_PINNED_SHA256="${REQUIRE_PINNED_SHA256:-${CI:-false}}"
+if [ "$REQUIRE_PINNED_SHA256" = "true" ] || [ "$REQUIRE_PINNED_SHA256" = "1" ]; then
+  if [ -z "$FFMPEG_VENDOR_SHA256" ] || [ -z "$FFPROBE_VENDOR_SHA256" ]; then
+    fail "FFMPEG_VENDOR_SHA256 and FFPROBE_VENDOR_SHA256 must be pinned before fetching/executing FFmpeg in a secrets-bearing job. Pin a verified build (and ideally a versioned URL). See docs/release-pipeline.md."
+  fi
+fi
+
 # fetch_one <url> <sha256-or-empty> <expected-binary-name> <dest-path>
 fetch_one() {
   local url="$1" want_sha="$2" name="$3" dest="$4"

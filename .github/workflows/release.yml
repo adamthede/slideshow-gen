@@ -77,9 +77,21 @@ jobs:
         # Tauri bundle-resource dir (Marquee.app/Contents/Resources/{ffmpeg,
         # ffprobe} after the build). The script FAILS CLOSED on a GPL/nonfree
         # build or a missing capability (h264_videotoolbox / drawtext / ...),
-        # so a wrongly-licensed or broken FFmpeg never ships. Source + optional
-        # pinned sha256 are overridable via FFMPEG_VENDOR_URL / FFPROBE_VENDOR_URL
-        # / *_SHA256 — see docs/release-pipeline.md.
+        # so a wrongly-licensed or broken FFmpeg never ships.
+        #
+        # SUPPLY-CHAIN: this runner holds the Apple signing secrets, and the
+        # script executes the downloaded binary to run its guards. GitHub sets
+        # CI=true, so the script REFUSES to run unless both SHA256s are pinned.
+        # Set these four repository variables (Settings -> Secrets and variables
+        # -> Actions -> Variables) to a specific, verified build before the
+        # first real run — see docs/release-pipeline.md:
+        #   FFMPEG_VENDOR_URL, FFPROBE_VENDOR_URL,
+        #   FFMPEG_VENDOR_SHA256, FFPROBE_VENDOR_SHA256
+        env:
+          FFMPEG_VENDOR_URL: ${{ vars.FFMPEG_VENDOR_URL }}
+          FFPROBE_VENDOR_URL: ${{ vars.FFPROBE_VENDOR_URL }}
+          FFMPEG_VENDOR_SHA256: ${{ vars.FFMPEG_VENDOR_SHA256 }}
+          FFPROBE_VENDOR_SHA256: ${{ vars.FFPROBE_VENDOR_SHA256 }}
         run: |
           set -euxo pipefail
           desktop/scripts/vendor-ffmpeg.sh desktop/src-tauri/resources

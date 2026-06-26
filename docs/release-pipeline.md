@@ -153,7 +153,27 @@ committed** (each is tens of MB; `.gitignore`d under
 server (`https://ffmpeg.martin-riedl.de/redirect/latest/macos/arm64/release/{ffmpeg,ffprobe}.zip`).
 Chosen because it publishes static `aarch64-apple-darwin` builds of both
 `ffmpeg` and `ffprobe` behind a stable download API. Override with
-`FFMPEG_VENDOR_URL` / `FFPROBE_VENDOR_URL` (+ optional `*_SHA256`).
+`FFMPEG_VENDOR_URL` / `FFPROBE_VENDOR_URL` (+ `*_SHA256`).
+
+**Supply-chain: pinned checksums are REQUIRED in CI.** The script downloads a
+binary and then *executes* it (to run the license/feature guards), and the
+release runner holds the Apple signing secrets — so executing an unverified
+binary from a third-party host would be a supply-chain risk. GitHub Actions sets
+`CI=true`, and the script **refuses to run** unless both `FFMPEG_VENDOR_SHA256`
+and `FFPROBE_VENDOR_SHA256` are set. Before the first real run, set **four
+repository variables** (Settings → Secrets and variables → Actions → Variables),
+ideally pointing at a *versioned* (not `latest`) URL so releases are reproducible:
+
+| Repo variable | Value |
+| --- | --- |
+| `FFMPEG_VENDOR_URL` | Pinned, versioned `ffmpeg.zip` URL |
+| `FFPROBE_VENDOR_URL` | Pinned, versioned `ffprobe.zip` URL |
+| `FFMPEG_VENDOR_SHA256` | `shasum -a 256 ffmpeg.zip` of that build |
+| `FFPROBE_VENDOR_SHA256` | `shasum -a 256 ffprobe.zip` of that build |
+
+To compute the checksums once: download the chosen `.zip`s locally, run
+`shasum -a 256`, and paste the digests into the variables. Local/dev runs may
+skip pinning (`REQUIRE_PINNED_SHA256=0`), which only emits a warning.
 
 **License posture — LGPL/non-GPL preferred.** Marquee invokes FFmpeg purely as
 a **separate child process** (subprocess; it never links `libav*`), so FFmpeg's
@@ -176,9 +196,10 @@ capability the engine actually uses (`h264_videotoolbox`, `aac`, `drawtext`,
 > GPL build, the build fails loudly — point `FFMPEG_VENDOR_URL`/
 > `FFPROBE_VENDOR_URL` at a confirmed LGPL build, or wire a from-source LGPL
 > build (`./configure --disable-gpl --disable-nonfree --enable-videotoolbox
-> --enable-audiotoolbox --enable-libfreetype …`) as the fallback. Once a source
-> is locked, pin a versioned URL + `*_SHA256` for reproducible, notarizable
-> releases.
+> --enable-audiotoolbox --enable-libfreetype …`) as the fallback. Pinning a
+> versioned URL + `*_SHA256` (the four repo variables above) is **required** in
+> CI, not just recommended — the build will not run unverified in a
+> secrets-bearing job.
 
 **Bundle-size delta.** A static `ffmpeg` + `ffprobe` adds roughly 80–120 MB to
 the `.app` (two ~40–70 MB static Mach-O binaries; exact size depends on the
