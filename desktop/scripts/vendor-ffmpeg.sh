@@ -102,6 +102,16 @@ fetch_one "$FFPROBE_VENDOR_URL" "$FFPROBE_VENDOR_SHA256" "ffprobe" "$DEST/ffprob
 
 FFMPEG="$DEST/ffmpeg"
 
+# --- Executability smoke check: fail fast with a clear message on a corrupt /
+# non-runnable download (arch or dynamic-linking issue). This must run BEFORE
+# the license guard: if the binary can't execute, its `-version` is empty and
+# the GPL-detection grep below would silently pass (a no-op), so the guard is
+# only trustworthy once we know the binary actually runs. ---
+"$FFMPEG" -hide_banner -version >/dev/null 2>&1 \
+  || fail "vendored ffmpeg cannot execute on this host (corrupt download or arch/linking issue)"
+"$DEST/ffprobe" -hide_banner -version >/dev/null 2>&1 \
+  || fail "vendored ffprobe cannot execute on this host (corrupt download or arch/linking issue)"
+
 # --- License guard: refuse GPL / nonfree builds for a distributed product. ---
 CONFIG_LINE="$("$FFMPEG" -hide_banner -version 2>/dev/null | grep -i '^configuration:' || true)"
 log "ffmpeg configuration: $CONFIG_LINE"
