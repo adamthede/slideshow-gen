@@ -210,11 +210,17 @@ jobs:
         run: |
           set -euo pipefail
           APP_PATH="${{ steps.locate.outputs.app_path }}"
-          echo "Inventory of nested Mach-O code objects in the bundle:"
-          # Informational: list every nested binary/framework/dylib for the log.
-          find "$APP_PATH/Contents" \
-            \( -type f -name "*.dylib" -o -type f -name "*.so" \
-               -o -type d -name "*.framework" \) -print || true
+          echo "Inventory of nested code objects in the bundle:"
+          # Informational, for the CI log. Two passes so we don't miss
+          # extensionless Mach-O executables (e.g. Contents/MacOS/Marquee and
+          # the sidecar), which a name-glob alone would skip:
+          #   1. .framework bundles (dirs)
+          #   2. every regular file that `file` reports as Mach-O (covers
+          #      dylib/.so AND extensionless executables)
+          find "$APP_PATH/Contents" -type d -name "*.framework" -print || true
+          find "$APP_PATH/Contents" -type f -print0 \
+            | xargs -0 file \
+            | grep -E "Mach-O" || true
           echo "--- codesign --verify --deep --strict --verbose=2 ---"
           codesign --verify --deep --strict --verbose=2 "$APP_PATH"
           echo "Deep-verify gate PASSED: every nested code object is validly signed."
