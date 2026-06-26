@@ -44,6 +44,10 @@
       "icons/icon.ico"
     ],
     "externalBin": ["binaries/slideshow-gen"],
+    "resources": {
+      "resources/ffmpeg": "ffmpeg",
+      "resources/ffprobe": "ffprobe"
+    },
     "macOS": {
       "frameworks": [],
       "minimumSystemVersion": "12.0",

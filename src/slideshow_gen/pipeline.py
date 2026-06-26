@@ -28,6 +28,7 @@ from .config import RenderConfig
 from .discovery import MediaItem, detect_duplicates, scan_directories, sort_items
 from .estimate import estimate_output
 from .events import ConsoleReporter, Reporter
+from .ffbin import ffmpeg_binary
 from .ffmpeg import (
     check_ffmpeg,
     parallel_render,
@@ -560,7 +561,7 @@ class RenderPipeline:
 
         # Base command
         cmd = [
-            "ffmpeg", "-y", "-hide_banner",
+            ffmpeg_binary(), "-y", "-hide_banner",
             "-v", "warning" if not self.config.verbose else "info",
             "-i", str(item.path),
         ]
@@ -711,7 +712,7 @@ class RenderPipeline:
         self.reporter.phase_started("compositing")
 
         cmd = [
-            "ffmpeg", "-y", "-hide_banner", "-v", "warning",
+            ffmpeg_binary(), "-y", "-hide_banner", "-v", "warning",
             "-i", str(segment_path),
         ]
 

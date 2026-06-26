@@ -11,6 +11,7 @@ import click
 from .config import RenderConfig
 from .discovery import MediaItem
 from .events import Reporter
+from .ffbin import ffmpeg_binary, ffprobe_binary
 from .heic import convert_heic_to_jpg, is_heic
 from .kenburns import choose_effect, generate_filter_chain
 from .memutil import auto_worker_count
@@ -21,7 +22,7 @@ def check_ffmpeg() -> bool:
     """Verify FFmpeg is installed and accessible."""
     try:
         result = subprocess.run(
-            ["ffmpeg", "-version"], capture_output=True, text=True, timeout=10,
+            [ffmpeg_binary(), "-version"], capture_output=True, text=True, timeout=10,
         )
         return result.returncode == 0
     except (FileNotFoundError, subprocess.TimeoutExpired):
@@ -77,7 +78,7 @@ def render_image_to_clip(
     # the encode at the exact slide duration.
     duration = config.slide_duration
     cmd = [
-        "ffmpeg", "-y", "-hide_banner",
+        ffmpeg_binary(), "-y", "-hide_banner",
         "-v", "warning" if not config.verbose else "info",
         "-loop", "1", "-i", str(source),
         "-f", "lavfi", "-i", "anullsrc=channel_layout=stereo:sample_rate=48000",
@@ -321,7 +322,7 @@ def render_batch(
     output_path = temp_dir / f"temp-batch-{batch_index:04d}.mp4"
 
     cmd = [
-        "ffmpeg", "-y", "-hide_banner",
+        ffmpeg_binary(), "-y", "-hide_banner",
         "-v", "warning" if not config.verbose else "info",
         *[arg for p in clip_paths for arg in ["-i", str(p)]],
         "-filter_complex_script", str(script_path),
@@ -446,7 +447,7 @@ def render_static_batch(
     output_path = temp_dir / f"temp-batch-{batch_index:04d}.mp4"
 
     cmd = [
-        "ffmpeg", "-y", "-hide_banner",
+        ffmpeg_binary(), "-y", "-hide_banner",
         "-v", "warning" if not config.verbose else "info",
         "-f", "lavfi", "-i", "anullsrc=channel_layout=stereo:sample_rate=48000",
         *[arg for source, _ in sources for arg in ["-i", str(source)]],
@@ -506,7 +507,7 @@ def render_final_concat(
     total_duration = sum(_get_duration(p) for p in segment_paths)
 
     cmd = [
-        "ffmpeg", "-y", "-hide_banner",
+        ffmpeg_binary(), "-y", "-hide_banner",
         "-v", "warning" if not config.verbose else "info",
         "-progress", "pipe:1",
         "-f", "concat", "-safe", "0",
@@ -629,7 +630,7 @@ def _get_duration(path: Path) -> float:
     """Get video duration via ffprobe. Returns 0.0 on failure."""
     try:
         result = subprocess.run(
-            ["ffprobe", "-v", "quiet", "-show_entries", "format=duration",
+            [ffprobe_binary(), "-v", "quiet", "-show_entries", "format=duration",
              "-of", "default=noprint_wrappers=1:nokey=1", str(path)],
             capture_output=True, text=True, timeout=10,
         )

@@ -25,6 +25,9 @@ dist-ssr
 
 # Sidecar / signing / packaging artifacts
 src-tauri/binaries/
+# Vendored, signed-at-build-time FFmpeg bundle resources (fetched by CI; never committed)
+src-tauri/resources/ffmpeg
+src-tauri/resources/ffprobe
 sidecar-build/
 sidecar-dist/
 *.dmg

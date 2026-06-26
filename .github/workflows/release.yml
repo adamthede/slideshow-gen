@@ -72,6 +72,18 @@ jobs:
           file desktop/src-tauri/binaries/slideshow-gen-aarch64-apple-darwin
           desktop/src-tauri/binaries/slideshow-gen-aarch64-apple-darwin --help
 
+      - name: Vendor license-clean static FFmpeg (E5.S7)
+        # Fetch a static ffmpeg + ffprobe for aarch64-apple-darwin into the
+        # Tauri bundle-resource dir (Marquee.app/Contents/Resources/{ffmpeg,
+        # ffprobe} after the build). The script FAILS CLOSED on a GPL/nonfree
+        # build or a missing capability (h264_videotoolbox / drawtext / ...),
+        # so a wrongly-licensed or broken FFmpeg never ships. Source + optional
+        # pinned sha256 are overridable via FFMPEG_VENDOR_URL / FFPROBE_VENDOR_URL
+        # / *_SHA256 — see docs/release-pipeline.md.
+        run: |
+          set -euxo pipefail
+          desktop/scripts/vendor-ffmpeg.sh desktop/src-tauri/resources
+
       - name: Set up Node.js 20
         uses: actions/setup-node@v4
         with:
@@ -171,6 +183,36 @@ jobs:
           # Confirm the sidecar alone passes deep-strict before it's embedded.
           codesign --verify --deep --strict --verbose=2 "$SIDECAR"
           codesign -dvvv "$SIDECAR" 2>&1 | grep -E "Authority|flags|TeamIdentifier" || true
+
+      - name: Sign vendored FFmpeg + ffprobe (hardened runtime)
+        # E5.S7 — the bundled ffmpeg/ffprobe are nested Mach-O executables that
+        # land in Marquee.app/Contents/Resources. Sign them inside-out BEFORE
+        # the Tauri build (exactly like the sidecar) so the bundler embeds
+        # already-signed, hardened-runtime binaries and the E5.S2 deep-verify
+        # gate passes them. Same flags as the sidecar:
+        #   --options runtime  -> hardened runtime (notarization requirement)
+        #   --timestamp        -> secure timestamp
+        #   --entitlements …   -> disable-library-validation (a static ffmpeg
+        #                         that dlopens any Apple-signed system lib under
+        #                         the hardened runtime needs this; harmless if
+        #                         not, and keeps signing identical to the sidecar)
+        env:
+          APPLE_SIGNING_IDENTITY: ${{ env.APPLE_SIGNING_IDENTITY }}
+        run: |
+          # No `set -x`: this step unlocks the keychain with its password.
+          set -euo pipefail
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          for bin in desktop/src-tauri/resources/ffmpeg desktop/src-tauri/resources/ffprobe; do
+            codesign \
+              --force \
+              --options runtime \
+              --timestamp \
+              --entitlements desktop/src-tauri/entitlements.plist \
+              --sign "$APPLE_SIGNING_IDENTITY" \
+              "$bin"
+            codesign --verify --strict --verbose=2 "$bin"
+            codesign -dvvv "$bin" 2>&1 | grep -E "Authority|flags|TeamIdentifier" || true
+          done
 
       - name: Build Tauri bundle (signed)
         working-directory: desktop
