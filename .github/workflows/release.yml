@@ -135,6 +135,40 @@ jobs:
           # Sanity-check the identity is present.
           security find-identity -v -p codesigning "$KEYCHAIN_PATH"
 
+      - name: Sign the PyInstaller sidecar (hardened runtime)
+        # E5.S2 — sign the frozen sidecar inside-out BEFORE the Tauri build so
+        # the bundler embeds an already-signed, hardened-runtime binary. This
+        # mirrors desktop/scripts/build-sidecar.sh exactly:
+        #   --options runtime    -> hardened runtime (required for notarization)
+        #   --entitlements …     -> disable-library-validation, so the
+        #                           PyInstaller bootloader can dlopen the
+        #                           Apple-signed Python.framework it extracts
+        #                           (see ADR-0002 "Signing under hardened runtime")
+        #   --timestamp          -> secure timestamp (Apple notary requirement)
+        #
+        # The sidecar is a PyInstaller --onefile binary: the Python framework
+        # and dylibs live INSIDE the binary's appended PKG archive, not as
+        # separate on-disk Mach-O files, so the single signature here covers
+        # them and `codesign --verify --deep --strict` finds no unsigned nested
+        # code (verified empirically — see docs/release-pipeline.md "Signing
+        # coverage"). No --onedir rewrite is required.
+        env:
+          APPLE_SIGNING_IDENTITY: ${{ env.APPLE_SIGNING_IDENTITY }}
+        run: |
+          set -euxo pipefail
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          SIDECAR="desktop/src-tauri/binaries/slideshow-gen-aarch64-apple-darwin"
+          codesign \
+            --force \
+            --options runtime \
+            --timestamp \
+            --entitlements desktop/src-tauri/entitlements.plist \
+            --sign "$APPLE_SIGNING_IDENTITY" \
+            "$SIDECAR"
+          # Confirm the sidecar alone passes deep-strict before it's embedded.
+          codesign --verify --deep --strict --verbose=2 "$SIDECAR"
+          codesign -dvvv "$SIDECAR" 2>&1 | grep -E "Authority|flags|TeamIdentifier" || true
+
       - name: Build Tauri bundle (signed)
         working-directory: desktop
         env:
@@ -161,6 +195,26 @@ jobs:
           fi
           echo "app_path=$APP_PATH" >> "$GITHUB_OUTPUT"
           echo "Found: $APP_PATH"
+
+      - name: Deep-verify signing coverage (gate, pre-notarize)
+        # E5.S2 — fail the build if ANY nested executable, framework, or dylib
+        # inside Marquee.app is unsigned or invalidly signed. This runs AFTER
+        # the bundle is built and signed and BEFORE notarization, so we never
+        # spend a real notary submission on a bundle Apple would reject for
+        # signing-coverage gaps. `--deep` recurses every nested code object;
+        # `--strict` applies the full set of validity checks; `--verbose=2`
+        # prints each object as it's verified for an auditable CI log.
+        run: |
+          set -euo pipefail
+          APP_PATH="${{ steps.locate.outputs.app_path }}"
+          echo "Inventory of nested Mach-O code objects in the bundle:"
+          # Informational: list every nested binary/framework/dylib for the log.
+          find "$APP_PATH/Contents" \
+            \( -type f -name "*.dylib" -o -type f -name "*.so" \
+               -o -type d -name "*.framework" \) -print || true
+          echo "--- codesign --verify --deep --strict --verbose=2 ---"
+          codesign --verify --deep --strict --verbose=2 "$APP_PATH"
+          echo "Deep-verify gate PASSED: every nested code object is validly signed."
 
       - name: Zip Marquee.app for notarization
         id: zip
