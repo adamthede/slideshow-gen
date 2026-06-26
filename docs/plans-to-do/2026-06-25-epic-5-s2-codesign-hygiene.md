@@ -1,6 +1,6 @@
 ---
 title: Epic 5.S2 — Code-signing hygiene (sign all nested binaries, deep-verify gate)
-status: "In Progress"
+status: "QA Needed"
 linked_pr: ""
 ---
 
