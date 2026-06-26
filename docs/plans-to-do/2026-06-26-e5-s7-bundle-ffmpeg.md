@@ -1,7 +1,7 @@
 ---
 title: Epic 5.S7 — Bundle a signed FFmpeg into Marquee.app (distribution blocker)
-status: "In Progress"
-linked_pr: ""
+status: "QA Needed"
+linked_pr: "https://github.com/adamthede/slideshow-gen/pull/14"
 ---
 
 # Epic 5.S7: Bundle FFmpeg into Marquee.app
