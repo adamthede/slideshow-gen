@@ -9,12 +9,12 @@
 | 1 | 2026-06-26 20:35 | 2 | 2 | 0 | 0 | c3102f9 | 100% |
 | 2 | 2026-06-26 20:37 | 2 | 1 | 1 | 0 | bf6ea5c | 50% |
 | 3 | 2026-06-26 20:40 | 1 | 1 | 0 | 0 | b0c6b85 | 100% |
-| 4 | 2026-06-26 20:44 | 1 | 0 | 1 | 0 | — | 0% |
+| 4 | 2026-06-26 20:45 | 2 | 1 | 1 | 0 | d0754e4 | 50% |
 
 ## Reviewer Effectiveness
 | Reviewer | Total Found | T1 (Must) | T2 (Should) | T3 (Consider) | T4 (Dismiss) | Actioned % | Signal:Noise |
 |----------|------------|-----------|-------------|---------------|-------------|-----------|-------------|
-| Gemini | 6 | 0 | 4 | 0 | 2 | 67% | 4:2 |
+| Gemini | 7 | 0 | 5 | 0 | 2 | 71% | 5:2 |
 | Copilot | 0 | 0 | 0 | 0 | 0 | n/a | — |
 
 > Copilot was requested (cycle 1) but returned "unable to review … the user who requested the review has reached their quota limit" — it produced zero review threads on this PR.
@@ -22,14 +22,14 @@
 ## Issue Categories (Cumulative)
 | Category | T1 | T2 | T3 | T4 | Total | % of All |
 |----------|----|----|----|----|-------|----------|
-| error-handling | 0 | 2 | 0 | 0 | 2 | 33% |
-| test-coverage | 0 | 1 | 0 | 1 | 2 | 33% |
-| security | 0 | 1 | 0 | 0 | 1 | 17% |
-| api-contract | 0 | 0 | 0 | 1 | 1 | 17% |
+| error-handling | 0 | 3 | 0 | 0 | 3 | 43% |
+| test-coverage | 0 | 1 | 0 | 1 | 2 | 29% |
+| security | 0 | 1 | 0 | 0 | 1 | 14% |
+| api-contract | 0 | 0 | 0 | 1 | 1 | 14% |
 
 **Status:** READY FOR HUMAN REVIEW (MAX CYCLES REACHED — cycle 4)
 
-Loop terminated at the cycle-4 hard cap. Trend 100% → 50% → 100% → 0%: every Gemini finding through cycle 3 was a genuine T2 and was fixed; cycle 4's sole item was a confidently-wrong "CRITICAL" false positive (Tauri `resources` schema), dismissed with a reasoned inline reply. All bot threads are resolved; no actionable items remain. The signed-build / clean-Mac verification is human-gated (Apple secrets) and called out in the PR body.
+Loop terminated at the cycle-4 hard cap. Trend 100% → 50% → 100% → 50%: every Gemini finding through cycle 4 except one was a genuine T2 and was fixed (5 of 7 actioned). Cycle 4 produced two threads — a real `pipefail` error-handling bug in the vendor script (fixed) and a confidently-wrong "CRITICAL" false positive (Tauri `resources` schema), dismissed with a reasoned inline reply after verifying against the vendored crate source. All 7 bot threads are resolved; no actionable items remain. The signed-build / clean-Mac verification is human-gated (Apple secrets) and called out in the PR body.
 
 ## Cycle 1 — 2026-06-26 20:35
 
@@ -107,7 +107,16 @@ Message: fix: Address PR review cycle 3 — executability smoke check before gua
 ### Recurrence Patterns
 No recurring patterns detected this cycle (script-internal diagnostics/guard ordering).
 
-## Cycle 4 — 2026-06-26 20:44
+## Cycle 4 — 2026-06-26 20:45
+
+### Actioned (1)
+#### T2-SHOULD: Mach-O grep can crash the script under `set -euo pipefail`
+- **File:** `desktop/scripts/vendor-ffmpeg.sh:89`
+- **Category:** `error-handling`
+- **Reviewer:** Gemini (`gemini-code-assist`)
+- **Comment:** "if `grep -i 'Mach-O'` fails to find any matching line … the entire pipeline will return a non-zero exit code … bypassing the descriptive error message …"
+- **Disposition:** FIXED — appended `|| true` to the fallback pipeline so a no-match falls through to the descriptive `fail "could not find the $name executable"` instead of an opaque `pipefail` exit. Verified: a no-Mach-O archive now reaches the descriptive error.
+- **Thread ID:** PRRT_kwDOR-Xvl86MoaMe
 
 ### Dismissed (1)
 #### T4-DISMISS: "Tauri v2 resources must be an array" (CRITICAL, false positive)

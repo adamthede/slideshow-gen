@@ -4,20 +4,20 @@
 ## Active PRs
 | PR | Title | Cycles | Status | Last Cycle | Actioned | Ratio |
 |----|-------|--------|--------|------------|----------|-------|
-| #14 | Epic 5.S7 — bundle a signed FFmpeg into Marquee.app | 4 | READY FOR HUMAN REVIEW (max cycles) | 2026-06-26 | 4 | 67% |
+| #14 | Epic 5.S7 — bundle a signed FFmpeg into Marquee.app | 4 | READY FOR HUMAN REVIEW (max cycles) | 2026-06-26 | 5 | 71% |
 
 ## Cumulative Bot Effectiveness
 | Reviewer | Total Comments | T1 | T2 | T3 | T4 | Actioned % | Signal:Noise |
 |----------|---------------|----|----|----|----|-----------|-------------|
 | Copilot | 65 | 6 | 51 | 3 | 5 | 88% | 57:8 |
-| Gemini | 81 | 0 | 37 | 11 | 33 | 46% | 37:44 |
+| Gemini | 82 | 0 | 38 | 11 | 33 | 46% | 38:44 |
 
 ## Top Issue Categories (Across All PRs)
 | Category | T1+T2 (Actioned) | T3+T4 (Noise) | Total | Actioned % |
 |----------|-------------------|----------------|-------|-----------|
 | data-integrity | 26 | 5 | 31 | 84% |
 | documentation | 19 | 5 | 24 | 79% |
-| error-handling | 19 | 3 | 22 | 86% |
+| error-handling | 20 | 3 | 23 | 87% |
 | style | 10 | 32 | 42 | 24% |
 | api-contract | 7 | 2 | 9 | 78% |
 | security | 8 | 0 | 8 | 100% |
