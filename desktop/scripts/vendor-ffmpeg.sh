@@ -86,7 +86,10 @@ fetch_one() {
   local found
   found="$(find "$ex" -type f -name "$name" | head -n1)"
   if [ -z "$found" ]; then
-    found="$(find "$ex" -type f -print0 | xargs -0 file | grep -i 'Mach-O' | head -n1 | cut -d: -f1)"
+    # `|| true`: under `set -euo pipefail`, a no-match `grep` exits non-zero and
+    # would kill the script here, bypassing the descriptive error below. Swallow
+    # it so an archive with no Mach-O falls through to the clear failure message.
+    found="$(find "$ex" -type f -print0 | xargs -0 file | grep -i 'Mach-O' | head -n1 | cut -d: -f1 || true)"
   fi
   [ -n "$found" ] || fail "could not find the $name executable inside $url"
 
