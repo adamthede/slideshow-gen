@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FFmpeg Bundling — Action Brief (Marquee E5.S7)</title>
+<style>
+  :root{
+    --bg:#1c1917; --panel:#26211d; --panel2:#2f2925; --line:#3a332e;
+    --ink:#ece7e1; --muted:#a8a09a; --faint:#6f665f;
+    --orange:#FF8F3B; --orange2:#FDAD57; --orange3:#FFCE9D;
+    --amber:#fbbf24; --teal:#2dd4bf; --rose:#fb7185; --emerald:#34d399;
+    --cyan:#22d3ee; --indigo:#818cf8; --purple:#c084fc; --gray:#9ca3af;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{
+    margin:0;background:var(--bg);color:var(--ink);
+    font:16px/1.6 -apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",sans-serif;
+    -webkit-font-smoothing:antialiased;padding:0 0 120px;
+  }
+  .wrap{max-width:880px;margin:0 auto;padding:0 24px}
+  header{padding:56px 0 28px;border-bottom:1px solid var(--line)}
+  .kicker{font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:var(--orange);font-weight:700}
+  h1{font-size:40px;line-height:1.1;font-weight:300;margin:14px 0 10px;letter-spacing:-.01em}
+  h1 b{font-weight:600;color:var(--orange2)}
+  .sub{color:var(--muted);font-size:15px;max-width:62ch}
+  .meta{margin-top:18px;display:flex;gap:26px;flex-wrap:wrap;font-size:12px;color:var(--faint)}
+  .meta b{color:var(--muted);font-weight:500}
+  h2{font-size:13px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);font-weight:700;margin:48px 0 4px}
+  h2 .n{color:var(--orange);margin-right:10px;font-variant-numeric:tabular-nums}
+  h3{font-size:18px;font-weight:600;margin:26px 0 8px;color:var(--ink)}
+  p{margin:10px 0}
+  a{color:var(--orange2);text-decoration:none;border-bottom:1px solid rgba(253,173,87,.3)}
+  a:hover{border-bottom-color:var(--orange2)}
+  code,kbd{font-family:"SF Mono",ui-monospace,Menlo,monospace;font-size:13px}
+  code{background:var(--panel2);color:var(--orange3);padding:1px 6px;border-radius:4px}
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:22px 24px;margin:16px 0}
+  .panel.tl{border-left:3px solid var(--orange)}
+  .callout{border-radius:12px;padding:16px 20px;margin:16px 0;font-size:14.5px}
+  .callout .lbl{font-size:11px;letter-spacing:.12em;text-transform:uppercase;font-weight:700;display:block;margin-bottom:6px}
+  .c-crit{background:rgba(251,113,133,.08);border:1px solid rgba(251,113,133,.3)} .c-crit .lbl{color:var(--rose)}
+  .c-warn{background:rgba(251,191,36,.07);border:1px solid rgba(251,191,36,.28)} .c-warn .lbl{color:var(--amber)}
+  .c-ok{background:rgba(52,211,153,.07);border:1px solid rgba(52,211,153,.28)} .c-ok .lbl{color:var(--emerald)}
+  .c-note{background:rgba(129,140,248,.07);border:1px solid rgba(129,140,248,.26)} .c-note .lbl{color:var(--indigo)}
+  pre{background:#16130f;border:1px solid var(--line);border-radius:10px;padding:16px 18px;overflow:auto;margin:14px 0}
+  pre code{background:none;color:#d9cfc4;padding:0;font-size:12.5px;line-height:1.7}
+  pre .cm{color:var(--faint)} pre .vr{color:var(--cyan)} pre .st{color:var(--emerald)}
+  table{width:100%;border-collapse:collapse;margin:16px 0;font-size:13.5px}
+  th,td{text-align:left;padding:11px 12px;border-bottom:1px solid var(--line);vertical-align:top}
+  th{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--faint);font-weight:600}
+  td b{color:var(--ink);font-weight:600}
+  .tag{display:inline-block;font-size:10.5px;letter-spacing:.04em;font-weight:700;padding:2px 8px;border-radius:20px;text-transform:uppercase}
+  .t-lgpl{background:rgba(52,211,153,.14);color:var(--emerald)}
+  .t-gpl{background:rgba(251,113,133,.14);color:var(--rose)}
+  .t-verify{background:rgba(251,191,36,.14);color:var(--amber)}
+  .t-static{background:rgba(34,211,238,.13);color:var(--cyan)}
+  .t-dyn{background:rgba(156,163,175,.14);color:var(--gray)}
+  ul{margin:10px 0;padding-left:22px} li{margin:7px 0}
+  .check{list-style:none;padding-left:0}
+  .check li{position:relative;padding-left:34px;margin:14px 0}
+  .check li .step{position:absolute;left:0;top:-1px;width:22px;height:22px;border-radius:50%;background:var(--panel2);border:1px solid var(--orange);color:var(--orange2);font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center}
+  .small{font-size:12.5px;color:var(--faint)}
+  hr{border:none;border-top:1px solid var(--line);margin:40px 0}
+  .foot{margin-top:50px;padding-top:20px;border-top:1px solid var(--line);font-size:12px;color:var(--faint)}
+  .pill{font-size:11px;color:var(--faint);border:1px solid var(--line);border-radius:20px;padding:3px 11px}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <div class="kicker">Marquee · Epic 5.S7 · Decision &amp; Action Brief</div>
+  <h1>Bundling a signed <b>FFmpeg</b> into Marquee.app</h1>
+  <p class="sub">Everything you need to take <a href="https://github.com/adamthede/slideshow-gen/pull/14">PR&nbsp;#14</a> from "review-ready" to "ships a working render on a clean Mac" — the decisions only you can make, the exact steps, the license situation, and the build sources worth checking.</p>
+  <div class="meta">
+    <span><b>PR</b> · slideshow-gen #14</span>
+    <span><b>Status</b> · open, mergeable, not merged</span>
+    <span><b>Author</b> · dispatched agent (Opus)</span>
+    <span><b>Date</b> · 2026-06-26</span>
+  </div>
+</header>
+
+<div class="callout c-ok">
+  <span class="lbl">The one-sentence version</span>
+  The code is done and reviewed; before a real release you must (1) choose an <b>LGPL static arm64 FFmpeg build</b>, (2) pin it via four GitHub repo variables, and (3) run one cert-bearing CI build + a clean-Mac render to prove it. CI is <b>fail-closed</b> until step&nbsp;2 is done, so nothing ships by accident.
+</div>
+
+<h2><span class="n">01</span>Why this exists</h2>
+<p>Marquee shells out to <code>ffmpeg</code>/<code>ffprobe</code> as separate subprocesses to render slideshows. Today it finds them on your <code>PATH</code> — which works on <em>your</em> dev Mac (Homebrew) but <b>fails on any clean Mac</b> with "FFmpeg not found." That's a hard distribution blocker: a notarized app a normal person downloads can't render. E5.S7 fixes it by shipping a signed copy of FFmpeg <em>inside</em> the app bundle.</p>
+
+<div class="panel tl">
+  <h3>What the agent already built (no action needed)</h3>
+  <ul>
+    <li><b>Resolution order</b> — a new <code>ffbin.py</code> prefers a bundled binary (via env var) and falls back to <code>PATH</code>. The standalone CLI behavior is unchanged.</li>
+    <li><b>Bundle wiring</b> — Tauri ships <code>ffmpeg</code>+<code>ffprobe</code> as bundle resources; the binaries are fetched at build time and <b>never committed</b> to the repo.</li>
+    <li><b>CI vendor + sign</b> — <code>release.yml</code> downloads, verifies, and signs both binaries inside-out so the existing <code>codesign --deep --strict</code> gate (from E5.S2) now covers them.</li>
+    <li><b>Fail-closed guards</b> — the vendor script refuses any build that advertises <code>--enable-gpl</code>/<code>--enable-nonfree</code>, or that's missing a capability Marquee uses (<code>h264_videotoolbox</code>, <code>aac</code>, <code>drawtext</code>, <code>zoompan</code>, …).</li>
+  </ul>
+</div>
+
+<h2><span class="n">02</span>What's needed from you</h2>
+<p>Three things, in order. None can be faked by an agent — they need your Apple signing identity and your judgment on the build source.</p>
+
+<ul class="check">
+  <li><span class="step">1</span><b>Pick an LGPL static arm64 FFmpeg + ffprobe build</b> that includes <code>h264_videotoolbox</code> and <code>drawtext</code>. (See <a href="#sources">§05 build sources</a> and <a href="#license">§04 license</a>.) Download the <code>ffmpeg.zip</code> and <code>ffprobe.zip</code>.</li>
+  <li><span class="step">2</span><b>Compute each archive's SHA-256</b> and set <b>four repo variables</b>. CI refuses to run until all four are present (this is deliberate — see <a href="#know">§06</a>).</li>
+  <li><span class="step">3</span><b>Run one cert-bearing build + prove it.</b> Trigger <code>release.yml</code> via <code>workflow_dispatch</code> with your Apple secrets, confirm the guards pass and <code>codesign --verify --deep --strict</code> accepts the signed binaries, then open the notarized app on a Mac with <b>no ffmpeg on PATH</b> and complete a render.</li>
+</ul>
+
+<h3>Copy-paste for step 2</h3>
+<pre><code><span class="cm"># compute the hashes (after downloading the two zips)</span>
+shasum -a 256 ffmpeg.zip ffprobe.zip
+
+<span class="cm"># set the four repo variables (paste a PINNED, versioned URL — not "latest")</span>
+gh variable set <span class="vr">FFMPEG_VENDOR_URL</span>    -R adamthede/slideshow-gen -b <span class="st">"https://…/ffmpeg.zip"</span>
+gh variable set <span class="vr">FFPROBE_VENDOR_URL</span>   -R adamthede/slideshow-gen -b <span class="st">"https://…/ffprobe.zip"</span>
+gh variable set <span class="vr">FFMPEG_VENDOR_SHA256</span>  -R adamthede/slideshow-gen -b <span class="st">"&lt;sha of ffmpeg.zip&gt;"</span>
+gh variable set <span class="vr">FFPROBE_VENDOR_SHA256</span> -R adamthede/slideshow-gen -b <span class="st">"&lt;sha of ffprobe.zip&gt;"</span></code></pre>
+
+<table>
+  <tr><th>Variable</th><th>What to put</th></tr>
+  <tr><td><b>FFMPEG_VENDOR_URL</b></td><td>A <b>pinned, versioned</b> <code>ffmpeg.zip</code> URL (avoid "latest" — it changes under you)</td></tr>
+  <tr><td><b>FFPROBE_VENDOR_URL</b></td><td>The matching <code>ffprobe.zip</code> URL from the same build</td></tr>
+  <tr><td><b>FFMPEG_VENDOR_SHA256</b></td><td><code>shasum -a 256 ffmpeg.zip</code></td></tr>
+  <tr><td><b>FFPROBE_VENDOR_SHA256</b></td><td><code>shasum -a 256 ffprobe.zip</code></td></tr>
+</table>
+<p class="small">The script's current default (if you set nothing) points at Martin Riedl's <code>…/latest/macos/arm64/release/{ffmpeg,ffprobe}.zip</code> — but in CI it <b>will not run</b> without the SHA pins, by design.</p>
+
+<h2 id="license"><span class="n">03</span>The license situation</h2>
+<div class="callout c-note"><span class="lbl">Not legal advice</span>This is a practical summary to make the decision tractable — for a commercial release, a quick sanity check with counsel on the bundled-binary obligation is cheap insurance.</div>
+
+<p>FFmpeg's core is <b>LGPL v2.1</b>. It only becomes <b>GPL</b> when built with certain optional components — most notably <code>libx264</code> and <code>libx265</code> (the software H.264/H.265 encoders). The good news for Marquee:</p>
+
+<div class="panel">
+  <h3>Why Marquee qualifies for the LGPL path</h3>
+  <ul>
+    <li><b>You encode with <code>h264_videotoolbox</code></b> — Apple's hardware encoder. It is <b>not</b> a GPL component, so you don't need <code>libx264</code> at all. Drop x264/x265 and the build stays LGPL.</li>
+    <li><b><code>drawtext</code> needs <code>libfreetype</code></b>, which is LGPL-compatible — fine to include in an LGPL build.</li>
+    <li><b>You invoke FFmpeg as a subprocess</b>, not by linking <code>libav*</code> into Marquee. That keeps FFmpeg's license off your application code entirely; the obligation is only about the <em>bundled binary itself</em>.</li>
+  </ul>
+</div>
+
+<h3>What an LGPL binary obliges you to do</h3>
+<ul>
+  <li>Include attribution, e.g. <em>"This software uses libraries from the FFmpeg project under the LGPLv2.1."</em></li>
+  <li>Make the <b>corresponding FFmpeg source</b> available (host the exact source/version you bundled, or link to it).</li>
+  <li>Document how it was built (the configure line). A pinned, reproducible build source makes this trivial.</li>
+</ul>
+<div class="callout c-crit"><span class="lbl">Avoid</span>A <b>GPL</b> FFmpeg build (anything with <code>--enable-gpl</code> / x264 / x265) would pull copyleft obligations onto distribution and is the wrong choice for a closed-source paid app. <code>--enable-nonfree</code> builds are <b>not redistributable at all</b>. The CI guard rejects both — but pick right at the source so you never hit the wall.</div>
+
+<h2><span class="n">04</span>The decision you actually have to make</h2>
+<div class="panel tl">
+  <p style="margin-top:0"><b>Which build source do you standardize on?</b> The honest catch (flagged by the implementing agent): a <em>prebuilt, verified, LGPL, static, arm64</em> macOS build that <em>also</em> includes <code>drawtext</code> is not a settled, obvious artifact. Most convenient prebuilt macOS binaries are GPL (they bundle x264). Your realistic options:</p>
+  <ul>
+    <li><b>A — Find a prebuilt LGPL build</b> that passes the guards (fastest, if one exists for your needs). Verify its configure line shows no <code>--enable-gpl</code> and includes <code>--enable-videotoolbox --enable-libfreetype</code>.</li>
+    <li><b>B — Build once from source</b> with exactly the flags you need (most control, guaranteed-clean license, reproducible — best for a product you'll ship repeatedly). Host the resulting zips yourself and pin them.</li>
+  </ul>
+  <p class="small">Recommendation: for a product you'll re-release, <b>B</b> (build-once, self-host, pin) is the durable answer — it makes the LGPL source-availability obligation trivial and removes dependence on a third party's "latest". Use <b>A</b> only if you find a build whose configure line you can actually inspect.</p>
+</div>
+
+<h2 id="sources"><span class="n">05</span>Build sources to check</h2>
+<p class="small">License/static/arch flags below are starting signals — <b>always confirm the actual configure line</b> (run <code>ffmpeg -version</code> and read <code>configuration:</code>). The CI guard will reject a GPL build, but you want to choose correctly upfront.</p>
+<table>
+  <tr><th>Source</th><th>Signals</th><th>Notes</th></tr>
+  <tr>
+    <td><b><a href="https://ffmpeg.martin-riedl.de/">Martin Riedl build server</a></b></td>
+    <td><span class="tag t-static">static</span> <span class="tag t-verify">verify license</span></td>
+    <td>The script's current default; offers macOS arm64 + versioned URLs. Confirm the release build's configure line is non-GPL with videotoolbox+drawtext before pinning.</td>
+  </tr>
+  <tr>
+    <td><b><a href="https://www.osxexperts.net/">OSXExperts</a></b></td>
+    <td><span class="tag t-static">static</span> <span class="tag t-verify">verify license</span></td>
+    <td>macOS arm64 static builds. Check whether the specific build is GPL or LGPL and whether drawtext is present.</td>
+  </tr>
+  <tr>
+    <td><b><a href="https://github.com/ColorsWind/FFmpeg-macOS">ColorsWind/FFmpeg-macOS</a></b></td>
+    <td><span class="tag t-lgpl">LGPLv2</span> <span class="tag t-dyn">shared/dynamic</span></td>
+    <td>Explicitly LGPL — but <em>shared</em> (universal) binaries, not static. May not fit the single-file bundle model cleanly; check before relying on it.</td>
+  </tr>
+  <tr>
+    <td><b><a href="https://evermeet.cx/ffmpeg/">evermeet.cx</a></b></td>
+    <td><span class="tag t-gpl">likely GPL</span> <span class="tag t-static">static</span></td>
+    <td>Popular macOS static builds, but typically GPL (include x264). Likely rejected by the guard — verify before assuming.</td>
+  </tr>
+  <tr>
+    <td><b><a href="https://gist.github.com/ercansormaz/506de91dc1dab800c753cd1f86d74c3a">Build-from-source guide (FFmpeg 8.1, May 2026)</a></b></td>
+    <td><span class="tag t-lgpl">you control</span> <span class="tag t-static">static</span></td>
+    <td>Option B. Includes <code>--enable-libfreetype</code> + static flags; add <code>--enable-videotoolbox</code> and omit <code>--enable-gpl</code>/x264 for a clean LGPL build.</td>
+  </tr>
+  <tr>
+    <td><b><a href="https://github.com/Vargol/ffmpeg-apple-arm64-build">Vargol/ffmpeg-apple-arm64-build</a></b></td>
+    <td><span class="tag t-lgpl">you control</span> <span class="tag t-static">static</span></td>
+    <td>Apple-silicon-targeted build script (open-source codecs). A second build-it-yourself reference.</td>
+  </tr>
+</table>
+<p class="small">Reference: <a href="https://ffmpeg.org/legal.html">FFmpeg License and Legal Considerations</a> — the canonical source on what triggers GPL and the LGPL compliance checklist.</p>
+
+<h2 id="know"><span class="n">06</span>What you should know</h2>
+<div class="callout c-warn">
+  <span class="lbl">Why the SHA pins are mandatory</span>
+  During review, the bot caught a <b>real security-high issue</b>: the CI job downloads and <em>executes</em> a binary from a third-party host, inside a job that holds your Apple signing secrets. Without a hash pin, a compromised or swapped upstream binary could run in that trusted context. The fix made the script <b>refuse to run unless both SHA-256 values are set</b> — so a tampered download fails the hash check instead of executing. This is why CI is fail-closed and why you pin a versioned URL, not "latest".</p>
+</div>
+<ul>
+  <li><b>Bundle size grows ~80–120 MB.</b> A static FFmpeg is large; expect the notarized <code>.app</code> (and your download) to jump accordingly.</li>
+  <li><b>"latest" URLs are a trap.</b> They change under you, breaking both the hash pin and the LGPL "document the exact build" obligation. Pin a versioned artifact.</li>
+  <li><b>The guard is your safety net, not your chooser.</b> It rejects GPL/nonfree and missing-capability builds — but you still want to pick an LGPL build deliberately so the first cert-bearing run passes instead of failing the guard.</li>
+  <li><b>Notarization may surface an entitlement.</b> Spawning a child process is normal, but if the notary log names a missing entitlement, that's the one thing to add — flagged in the PR as a watch-item.</li>
+</ul>
+
+<h2><span class="n">07</span>Your checklist, condensed</h2>
+<div class="panel">
+  <ul class="check" style="margin:0">
+    <li><span class="step">1</span>Choose source (A: find LGPL prebuilt · B: build-once + self-host). Confirm configure line: no <code>--enable-gpl</code>, has <code>videotoolbox</code> + <code>drawtext</code>.</li>
+    <li><span class="step">2</span><code>shasum -a 256</code> both zips → set the 4 repo variables (pinned, versioned URLs).</li>
+    <li><span class="step">3</span><code>workflow_dispatch</code> run of <code>release.yml</code> with Apple secrets → confirm guards pass + <code>codesign --deep --strict</code> accepts.</li>
+    <li><span class="step">4</span>Open the notarized app on a Mac with <b>no ffmpeg on PATH</b> → complete a render. Add the LGPL attribution + source link to your distribution.</li>
+    <li><span class="step">5</span>Merge PR&nbsp;#14.</li>
+  </ul>
+</div>
+
+<div class="foot">
+  <span class="pill">Generated for Adam · Thede Technologies</span>
+  &nbsp; Source of truth for the implementation: <code>slideshow-gen/docs/release-pipeline.md</code> and <a href="https://github.com/adamthede/slideshow-gen/pull/14">PR #14</a>.
+  License details summarized from <a href="https://ffmpeg.org/legal.html">ffmpeg.org/legal.html</a>; verify any specific build's configure line yourself.
+</div>
+
+</div>
+</body>
+</html>
