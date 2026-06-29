@@ -185,6 +185,10 @@ To compute the checksums once: download the chosen `.zip`s locally, run
 `shasum -a 256`, and paste the digests into the variables. Local/dev runs may
 skip pinning (`REQUIRE_PINNED_SHA256=0`), which only emits a warning.
 
+> These four variables are **already set** to the pinned FFmpeg 8.1.1 build in
+> the "Source (pinned)" table above (versioned URLs + verified `sha256`s).
+> Update them in lockstep whenever the bundled FFmpeg version changes.
+
 **License posture — GPLv2 allowed (arm's-length subprocess).** The shipped
 FFmpeg is licensed under the **GNU General Public License v2** (it's a GPL
 build). That is fine for Marquee because Marquee invokes FFmpeg purely as a
