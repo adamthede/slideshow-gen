@@ -162,8 +162,8 @@ below (overridable with `FFMPEG_VENDOR_URL` / `FFPROBE_VENDOR_URL` + `*_SHA256`)
 
 | Artifact | URL | sha256 |
 | --- | --- | --- |
-| `ffmpeg.zip` | `…/download/macos/arm64/1778761665_8.1.1/ffmpeg.zip` | `a05b1a47bb3ac89a95a55eec713f8bbb347051bb07015f3b7d08fb62ed81a21e` |
-| `ffprobe.zip` | `…/download/macos/arm64/1778761665_8.1.1/ffprobe.zip` | `135e70d2518beeb568183952dbc4bdeca1628dd49a7376d57e6b27dbc57d209f` |
+| `ffmpeg.zip` | `https://ffmpeg.martin-riedl.de/download/macos/arm64/1778761665_8.1.1/ffmpeg.zip` | `a05b1a47bb3ac89a95a55eec713f8bbb347051bb07015f3b7d08fb62ed81a21e` |
+| `ffprobe.zip` | `https://ffmpeg.martin-riedl.de/download/macos/arm64/1778761665_8.1.1/ffprobe.zip` | `135e70d2518beeb568183952dbc4bdeca1628dd49a7376d57e6b27dbc57d209f` |
 
 **Supply-chain: pinned checksums are REQUIRED in CI.** The script downloads a
 binary and then *executes* it (to run the license/feature guards), and the
@@ -189,9 +189,9 @@ skip pinning (`REQUIRE_PINNED_SHA256=0`), which only emits a warning.
 > the "Source (pinned)" table above (versioned URLs + verified `sha256`s).
 > Update them in lockstep whenever the bundled FFmpeg version changes.
 
-**License posture — GPLv2 allowed (arm's-length subprocess).** The shipped
-FFmpeg is licensed under the **GNU General Public License v2** (it's a GPL
-build). That is fine for Marquee because Marquee invokes FFmpeg purely as a
+**License posture — GPLv3 allowed (arm's-length subprocess).** The shipped
+FFmpeg is licensed under the **GNU General Public License v3** (the pinned build
+is `--enable-gpl --enable-version3`, which makes the effective license GPLv3). That is fine for Marquee because Marquee invokes FFmpeg purely as a
 **separate child process** — it shells out to `ffmpeg`/`ffprobe` as standalone
 executables (`src/slideshow_gen/ffmpeg.py`, `media.py`) and **never links
 `libav*`** into its own code. Under the well-established GPL aggregation / "mere
@@ -203,8 +203,8 @@ keep this clean:
   direct-download, notarized `.app` — **not** through the Mac App Store. (GPL is
   incompatible with the App Store's terms; sidestepping the App Store is what
   makes shipping a GPL binary viable here.)
-- **We convey GPL compliance.** Because we redistribute a GPLv2 binary, the app
-  ships the full **GPLv2 license text** plus an attribution statement and a
+- **We convey GPL compliance.** Because we redistribute a GPLv3 binary, the app
+  ships the full **GPLv3 license text** plus an attribution statement and a
   **written offer for the corresponding source** (see "GPL compliance: what
   ships with the app" below).
 
@@ -214,7 +214,7 @@ have no right to ship. It also still fails if the build is missing any
 capability the engine actually uses (`h264_videotoolbox`, `aac`, `drawtext`,
 `zoompan`, `sidechaincompress`, `overlay`). The exact `configuration:` line and
 `-buildconf` are printed into the CI log for an auditable record of the license
-+ feature set of the precise binary shipped (and to anchor the GPLv2 obligation
++ feature set of the precise binary shipped (and to anchor the GPLv3 obligation
 to that exact build).
 
 **Documented future option — a self-built LGPL build.** Marquee encodes with
@@ -230,20 +230,20 @@ fully open as a future option (no x264 needed):
   --enable-libfreetype …
 ```
 
-That would drop the GPLv2 obligation entirely, at the cost of building + signing
+That would drop the GPLv3 obligation entirely, at the cost of building + signing
 FFmpeg from source ourselves rather than fetching a prebuilt artifact. Until/
 unless that's worth doing, the pinned GPL build above is the shipped posture.
 
 ### GPL compliance: what ships with the app
 
-Because Marquee redistributes a GPLv2 FFmpeg binary, it conveys the GPLv2
+Because Marquee redistributes a GPLv3 FFmpeg binary, it conveys the GPLv3
 obligations with the app. Three artifacts are committed and wired into the Tauri
 bundle (`bundle.resources` in `tauri.conf.json`), so they land inside
 `Marquee.app/Contents/Resources/THIRD-PARTY/`:
 
 | Shipped file (in repo) | In the bundle | Purpose |
 | --- | --- | --- |
-| `desktop/src-tauri/resources/THIRD-PARTY/FFmpeg-COPYING.GPLv2.txt` | `Contents/Resources/THIRD-PARTY/FFmpeg-COPYING.GPLv2.txt` | The full, verbatim GNU GPL v2 license text. |
+| `desktop/src-tauri/resources/THIRD-PARTY/FFmpeg-COPYING.GPLv3.txt` | `Contents/Resources/THIRD-PARTY/FFmpeg-COPYING.GPLv3.txt` | The full, verbatim GNU GPL v3 license text. |
 | `desktop/src-tauri/resources/THIRD-PARTY/THIRD-PARTY-LICENSES.txt` | `Contents/Resources/THIRD-PARTY/THIRD-PARTY-LICENSES.txt` | Plain-text attribution + written offer for source, shipped inside the app. |
 | `THIRD-PARTY-LICENSES.md` (repo root) | — (repo-facing) | Same attribution + written offer, human-readable in the repo. |
 

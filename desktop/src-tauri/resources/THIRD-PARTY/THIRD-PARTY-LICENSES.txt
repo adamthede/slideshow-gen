@@ -10,12 +10,13 @@ FFmpeg
 ------
 
 Marquee uses FFmpeg (https://ffmpeg.org), licensed under the GNU General Public
-License v2. Bundled build: FFmpeg 8.1.1, static macOS/arm64, from
-ffmpeg.martin-riedl.de. The exact configure flags are reported by
+License v3. Bundled build: FFmpeg 8.1.1, static macOS/arm64, from
+ffmpeg.martin-riedl.de — built with `--enable-gpl --enable-version3`, which makes
+the effective license GPL v3. The exact configure flags are reported by
 `ffmpeg -version`.
 
-The full text of the GNU General Public License, version 2, is included
-alongside this file as `FFmpeg-COPYING.GPLv2.txt`.
+The full text of the GNU General Public License, version 3, is included
+alongside this file as `FFmpeg-COPYING.GPLv3.txt`.
 
 Marquee invokes FFmpeg only as a separate command-line program (a child
 process); it does not link the FFmpeg libraries (libav*) into its own code.

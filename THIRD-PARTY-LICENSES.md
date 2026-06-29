@@ -10,13 +10,14 @@ text, also ships **inside** `Marquee.app` at
 ## FFmpeg
 
 Marquee uses FFmpeg (<https://ffmpeg.org>), licensed under the GNU General
-Public License v2. Bundled build: FFmpeg 8.1.1, static macOS/arm64, from
-ffmpeg.martin-riedl.de. The exact configure flags are reported by
+Public License v3. Bundled build: FFmpeg 8.1.1, static macOS/arm64, from
+ffmpeg.martin-riedl.de — built with `--enable-gpl --enable-version3`, which
+makes the effective license GPL v3. The exact configure flags are reported by
 `ffmpeg -version`.
 
-The full text of the GNU General Public License, version 2, is included as
-[`desktop/src-tauri/resources/THIRD-PARTY/FFmpeg-COPYING.GPLv2.txt`](desktop/src-tauri/resources/THIRD-PARTY/FFmpeg-COPYING.GPLv2.txt)
-and ships in the app at `Contents/Resources/THIRD-PARTY/FFmpeg-COPYING.GPLv2.txt`.
+The full text of the GNU General Public License, version 3, is included as
+[`desktop/src-tauri/resources/THIRD-PARTY/FFmpeg-COPYING.GPLv3.txt`](desktop/src-tauri/resources/THIRD-PARTY/FFmpeg-COPYING.GPLv3.txt)
+and ships in the app at `Contents/Resources/THIRD-PARTY/FFmpeg-COPYING.GPLv3.txt`.
 
 Marquee invokes FFmpeg only as a **separate command-line program** (a child
 process) via the engine (`src/slideshow_gen/ffmpeg.py`, `media.py`); it does

@@ -1,5 +1,5 @@
 ---
-title: FFmpeg GPL license posture — relax vendor guard + GPLv2 attribution/source-offer
+title: FFmpeg GPL license posture — relax vendor guard + GPLv3 attribution/source-offer
 status: "QA Needed"
 linked_pr: "https://github.com/adamthede/slideshow-gen/pull/15"
 impl-model: opus
@@ -38,11 +38,11 @@ NOT libx264, and uses no GPL-only feature — so a future move to a self-built
    posture (GPL allowed for arm's-length subprocess distribution; nonfree still
    refused; cite the exec/aggregation rationale).
 2. **Update `docs/release-pipeline.md`** FFmpeg license-posture section: source
-   = Martin Riedl GPL static build, FFmpeg 8.1.1, license = GPLv2, why
+   = Martin Riedl GPL static build, FFmpeg 8.1.1, license = GPLv3, why
    GPL-via-subprocess is acceptable for this free direct-download (non-App-
    Store) product, plus the documented future self-built LGPL option.
-3. **GPL attribution pass** (Marquee now distributes a GPLv2 binary):
-   - Ship the **full GPLv2 license text** inside `Marquee.app` (Tauri bundle
+3. **GPL attribution pass** (Marquee now distributes a GPLv3 binary):
+   - Ship the **full GPLv3 license text** inside `Marquee.app` (Tauri bundle
      resource).
    - Ship a third-party attribution surface (`THIRD-PARTY-LICENSES.md` at repo
      root + a shipped copy in the bundle) with the required FFmpeg attribution
@@ -62,5 +62,5 @@ NOT libx264, and uses no GPL-only feature — so a future move to a self-built
   four env vars) prints "License guard passed" and "Feature guards passed" and
   ends OK — proving the GPL build now PASSES the relaxed guard.
 - The full test suite passes (no regressions vs. baseline).
-- GPLv2 text + attribution + written source offer ship inside `Marquee.app`
+- GPLv3 text + attribution + written source offer ship inside `Marquee.app`
   (wired into `tauri.conf.json` `bundle.resources`).
