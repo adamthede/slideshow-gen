@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <!-- Applied to: slideshow-gen sidecar + bundled ffmpeg/ffprobe (NOT the
+       Tauri shell — see app-entitlements.plist for that).
+
+       WHY disable-library-validation:
+         The PyInstaller --onefile sidecar extracts the PSF-signed
+         Python.framework + C-extension dylibs into a temp dir at launch and
+         dlopens them. Under the hardened runtime the default policy requires
+         all loaded libraries to be signed by the same team as the main binary
+         (Developer ID U85N54PC5J) or by Apple. The PSF-signed Python.framework
+         fails that check — hence this entitlement.
+
+         Static ffmpeg/ffprobe only dlopen Apple-signed system frameworks
+         (VideoToolbox, CoreMedia, CoreVideo, AudioToolbox) which are always
+         allowed regardless of this entitlement. The grant is applied here for
+         uniformity; it is harmless for ffmpeg/ffprobe.
+
+       WHY nothing else:
+         - No JIT / W^X memory: Python 3.11 has no JIT; no allow-jit needed.
+         - No sandbox: Marquee is direct-download; file access needs no
+           security-scoped bookmark entitlement.
+         - No network entitlement: the engine is fully offline.
+         - Child process spawn (sidecar → ffmpeg child): allowed by default
+           under the hardened runtime when the child is a properly signed binary.
+           No extra entitlement is required for fork/exec.
+
+       If the notary log names a missing entitlement, add only that one here. -->
+  <key>com.apple.security.cs.disable-library-validation</key>
+  <true/>
+</dict>
+</plist>
