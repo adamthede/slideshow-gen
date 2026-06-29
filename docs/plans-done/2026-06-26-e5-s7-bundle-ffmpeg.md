@@ -1,6 +1,7 @@
 ---
 title: Epic 5.S7 — Bundle a signed FFmpeg into Marquee.app (distribution blocker)
-status: "QA Needed"
+status: "Done"
+completed: 2026-06-29
 linked_pr: "https://github.com/adamthede/slideshow-gen/pull/14"
 ---
 
