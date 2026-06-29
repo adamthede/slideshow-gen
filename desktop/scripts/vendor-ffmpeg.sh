@@ -130,6 +130,15 @@ FFMPEG="$DEST/ffmpeg"
 # so there's an auditable record of the license + feature set actually shipped
 # (and so the GPLv2 obligation is anchored to the precise build). ---
 CONFIG_LINE="$("$FFMPEG" -hide_banner -version 2>/dev/null | grep -i '^configuration:' || true)"
+# Fail closed if the configuration: line is missing/empty. The smoke check above
+# only proves ffmpeg exits 0; it does NOT prove `-version` still emits a
+# `configuration:` line. If that line ever goes missing (format change, stripped
+# build), CONFIG_LINE would be empty and the --enable-nonfree grep below would
+# silently match nothing and "pass" — bypassing the license guard entirely. An
+# unverifiable build must not ship.
+if [ -z "$CONFIG_LINE" ]; then
+  fail "could not read FFmpeg's 'configuration:' line from -version; cannot verify the license guard. Refusing to ship an unverifiable build."
+fi
 log "ffmpeg configuration: $CONFIG_LINE"
 "$FFMPEG" -hide_banner -buildconf 2>/dev/null || true
 # GPL (--enable-gpl) is intentionally ALLOWED: FFmpeg is invoked arm's-length as
