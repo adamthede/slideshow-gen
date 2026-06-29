@@ -72,12 +72,15 @@ jobs:
           file desktop/src-tauri/binaries/slideshow-gen-aarch64-apple-darwin
           desktop/src-tauri/binaries/slideshow-gen-aarch64-apple-darwin --help
 
-      - name: Vendor license-clean static FFmpeg (E5.S7)
+      - name: Vendor static FFmpeg (E5.S7)
         # Fetch a static ffmpeg + ffprobe for aarch64-apple-darwin into the
         # Tauri bundle-resource dir (Marquee.app/Contents/Resources/{ffmpeg,
-        # ffprobe} after the build). The script FAILS CLOSED on a GPL/nonfree
-        # build or a missing capability (h264_videotoolbox / drawtext / ...),
-        # so a wrongly-licensed or broken FFmpeg never ships.
+        # ffprobe} after the build). A GPL build is allowed (FFmpeg is invoked
+        # arm's-length as a separate child process; we ship its GPLv2 text +
+        # written source offer — see docs/release-pipeline.md). The script still
+        # FAILS CLOSED on a non-redistributable --enable-nonfree build or a
+        # missing capability (h264_videotoolbox / drawtext / ...), so a
+        # non-shippable or broken FFmpeg never ships.
         #
         # SUPPLY-CHAIN: this runner holds the Apple signing secrets, and the
         # script executes the downloaded binary to run its guards. GitHub sets

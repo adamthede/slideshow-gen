@@ -10,12 +10,18 @@
 # build time, this script signs nothing — signing is a separate codesign step
 # in release.yml so the E5.S2 deep-verify gate exercises the embedded copies.
 #
-# LICENSE POSTURE (see docs/release-pipeline.md): Marquee invokes FFmpeg as a
-# **separate child process** (never linked), but we still prefer a clean
-# LGPL/non-GPL build for a distributed product. This script FAILS CLOSED: if
-# the fetched build advertises --enable-gpl / --enable-nonfree, or is missing a
-# capability the engine actually uses, the build stops here rather than shipping
-# a wrongly-licensed or broken FFmpeg.
+# LICENSE POSTURE (see docs/release-pipeline.md): GPL is ALLOWED, nonfree is
+# NOT. Marquee invokes FFmpeg purely as a **separate child process** (subprocess
+# via src/slideshow_gen/ffmpeg.py + media.py; it never links libav*), so under
+# the well-established GPL aggregation / "mere exec" principle FFmpeg's copyleft
+# reaches only the ffmpeg binary itself, not Marquee's own code. Distribution is
+# a free, direct-download, notarized .app (NOT the Mac App Store, where GPL is
+# incompatible), and we ship the FFmpeg GPLv2 text + a written offer for source
+# (see THIRD-PARTY-LICENSES.md / the bundled THIRD-PARTY dir), so a GPL build is
+# fine to ship. `--enable-nonfree` is a different animal: it produces a
+# genuinely non-redistributable binary, so this script STILL FAILS CLOSED on it
+# (and on any missing capability the engine actually uses) rather than shipping
+# something we have no right to distribute or that is broken.
 #
 # Source is overridable so Adam can pin an exact, verified build (recommended:
 # pin a versioned URL + sha256 once the source is confirmed):
@@ -32,9 +38,12 @@ mkdir -p "$DEST"
 
 # Default source: Martin Riedl's static macOS/arm64 build server. It exposes a
 # stable redirect API and ships ffmpeg + ffprobe as separate static binaries.
-# The license/feature guards below are the real contract — if this source ever
-# serves a GPL build or drops a needed feature, the guard stops the build and
-# Adam swaps FFMPEG_VENDOR_URL/FFPROBE_VENDOR_URL.
+# His macOS/arm64 build is a GPL build (--enable-gpl --enable-libfreetype
+# --enable-libx264) and his server offers no LGPL variant — which is fine under
+# the posture above (GPL allowed for arm's-length subprocess distribution). The
+# license/feature guards below are the real contract: a `--enable-nonfree` build
+# or a build missing a needed feature still stops the build, and Adam swaps
+# FFMPEG_VENDOR_URL/FFPROBE_VENDOR_URL.
 FFMPEG_VENDOR_URL="${FFMPEG_VENDOR_URL:-https://ffmpeg.martin-riedl.de/redirect/latest/macos/arm64/release/ffmpeg.zip}"
 FFPROBE_VENDOR_URL="${FFPROBE_VENDOR_URL:-https://ffmpeg.martin-riedl.de/redirect/latest/macos/arm64/release/ffprobe.zip}"
 FFMPEG_VENDOR_SHA256="${FFMPEG_VENDOR_SHA256:-}"
@@ -115,21 +124,36 @@ FFMPEG="$DEST/ffmpeg"
 "$DEST/ffprobe" -hide_banner -version >/dev/null 2>&1 \
   || fail "vendored ffprobe cannot execute on this host (corrupt download or arch/linking issue)"
 
-# --- License guard: refuse GPL / nonfree builds for a distributed product. ---
+# --- License guard: GPL is OK (arm's-length subprocess; see header + docs/
+# release-pipeline.md), but a non-redistributable --enable-nonfree build is NOT.
+# We print the exact configuration: line + -buildconf into the CI log either way
+# so there's an auditable record of the license + feature set actually shipped
+# (and so the GPLv2 obligation is anchored to the precise build). ---
 CONFIG_LINE="$("$FFMPEG" -hide_banner -version 2>/dev/null | grep -i '^configuration:' || true)"
 log "ffmpeg configuration: $CONFIG_LINE"
 "$FFMPEG" -hide_banner -buildconf 2>/dev/null || true
-if echo "$CONFIG_LINE" | grep -q -- '--enable-gpl'; then
-  fail "fetched FFmpeg is a GPL build (--enable-gpl). Pick an LGPL/non-GPL build for distribution (set FFMPEG_VENDOR_URL/FFPROBE_VENDOR_URL)."
+# GPL (--enable-gpl) is intentionally ALLOWED: FFmpeg is invoked arm's-length as
+# a separate child process, so its copyleft does not reach Marquee's own code,
+# and we convey GPLv2 (text + written offer for source) with the .app. Only
+# --enable-nonfree is refused — it yields a genuinely non-redistributable binary
+# we'd have no right to ship.
+if grep -q -- '--enable-nonfree' <<<"$CONFIG_LINE"; then
+  fail "fetched FFmpeg is a non-redistributable build (--enable-nonfree). GPL is allowed for this product, but nonfree is not — pick a build without --enable-nonfree (set FFMPEG_VENDOR_URL/FFPROBE_VENDOR_URL)."
 fi
-if echo "$CONFIG_LINE" | grep -q -- '--enable-nonfree'; then
-  fail "fetched FFmpeg is a non-redistributable build (--enable-nonfree)."
-fi
-log "License guard passed: no --enable-gpl / --enable-nonfree."
+log "License guard passed: no --enable-nonfree (GPL is allowed for arm's-length subprocess distribution)."
 
 # --- Feature guards: every capability the engine actually invokes. ---
-require_encoder() { "$FFMPEG" -hide_banner -encoders 2>/dev/null | grep -qw "$1" || fail "FFmpeg build missing required encoder: $1"; }
-require_filter()  { "$FFMPEG" -hide_banner -filters  2>/dev/null | grep -qw "$1" || fail "FFmpeg build missing required filter: $1"; }
+# Snapshot the tables ONCE, then match with a here-string (not a live
+# `ffmpeg | grep -q` pipe). `grep -q` exits on first match; against a still-
+# writing ffmpeg that closes the pipe early and SIGPIPEs ffmpeg (exit 141),
+# which under `set -o pipefail` propagates and fails the pipeline even though
+# the feature IS present — a real, timing-dependent false negative (it bit the
+# earliest-listed filter, sidechaincompress, on a real vendor run). A here-
+# string has no upstream writer process, so there's no SIGPIPE race.
+FF_ENCODERS="$("$FFMPEG" -hide_banner -encoders 2>/dev/null || true)"
+FF_FILTERS="$("$FFMPEG"  -hide_banner -filters  2>/dev/null || true)"
+require_encoder() { grep -qw -- "$1" <<<"$FF_ENCODERS" || fail "FFmpeg build missing required encoder: $1"; }
+require_filter()  { grep -qw -- "$1" <<<"$FF_FILTERS"  || fail "FFmpeg build missing required filter: $1"; }
 
 require_encoder "h264_videotoolbox"   # all encodes use the Apple HW encoder
 require_encoder "aac"                 # silent + music audio tracks
