@@ -13,14 +13,16 @@ direct-download distribution. Defined in
    `slideshow-gen-aarch64-apple-darwin` placed in
    `desktop/src-tauri/binaries/` — the path Tauri's `externalBin` config
    expects.
-3. **Vendors a license-clean static FFmpeg + ffprobe** for
+3. **Vendors a static FFmpeg + ffprobe** for
    `aarch64-apple-darwin` into `desktop/src-tauri/resources/` via
    `desktop/scripts/vendor-ffmpeg.sh` (E5.S7). The script fetches a static
-   build and **fails the build** if it is GPL/nonfree or is missing a
-   capability the engine uses (`h264_videotoolbox`, `aac`, `drawtext`,
-   `zoompan`, `sidechaincompress`, `overlay`). These resources ship inside
+   build and **fails the build** if it is `--enable-nonfree`
+   (non-redistributable) or is missing a capability the engine uses
+   (`h264_videotoolbox`, `aac`, `drawtext`, `zoompan`, `sidechaincompress`,
+   `overlay`). A **GPL** build is allowed — see "FFmpeg vendoring & license
+   posture" below for why. These resources ship inside
    `Marquee.app/Contents/Resources/` and are **not** committed to the repo
-   (`.gitignore`d). See "FFmpeg vendoring & license posture" below.
+   (`.gitignore`d).
 4. Installs Node 20, Rust stable with the `aarch64-apple-darwin` target,
    and `npm ci` in `desktop/`.
 5. Creates a fresh temporary keychain and imports the Developer ID
@@ -149,11 +151,19 @@ on `PATH` can render. They are fetched and signed at build time by
 committed** (each is tens of MB; `.gitignore`d under
 `desktop/src-tauri/resources/`).
 
-**Source (default, overridable).** Martin Riedl's static macOS/arm64 build
-server (`https://ffmpeg.martin-riedl.de/redirect/latest/macos/arm64/release/{ffmpeg,ffprobe}.zip`).
-Chosen because it publishes static `aarch64-apple-darwin` builds of both
-`ffmpeg` and `ffprobe` behind a stable download API. Override with
-`FFMPEG_VENDOR_URL` / `FFPROBE_VENDOR_URL` (+ `*_SHA256`).
+**Source (pinned).** Martin Riedl's static macOS/arm64 build server
+(`https://ffmpeg.martin-riedl.de`). Chosen because it publishes static
+`aarch64-apple-darwin` builds of both `ffmpeg` and `ffprobe` behind a stable,
+versioned download API. The shipped artifact is **FFmpeg 8.1.1** (build id
+`1778761665_8.1.1`), a **GPL** static build (its `configuration:` line shows
+`--enable-gpl --enable-libfreetype --enable-libx264`); this server publishes no
+LGPL variant. The exact URLs + checksums are pinned via the four repo variables
+below (overridable with `FFMPEG_VENDOR_URL` / `FFPROBE_VENDOR_URL` + `*_SHA256`):
+
+| Artifact | URL | sha256 |
+| --- | --- | --- |
+| `ffmpeg.zip` | `https://ffmpeg.martin-riedl.de/download/macos/arm64/1778761665_8.1.1/ffmpeg.zip` | `a05b1a47bb3ac89a95a55eec713f8bbb347051bb07015f3b7d08fb62ed81a21e` |
+| `ffprobe.zip` | `https://ffmpeg.martin-riedl.de/download/macos/arm64/1778761665_8.1.1/ffprobe.zip` | `135e70d2518beeb568183952dbc4bdeca1628dd49a7376d57e6b27dbc57d209f` |
 
 **Supply-chain: pinned checksums are REQUIRED in CI.** The script downloads a
 binary and then *executes* it (to run the license/feature guards), and the
@@ -175,31 +185,75 @@ To compute the checksums once: download the chosen `.zip`s locally, run
 `shasum -a 256`, and paste the digests into the variables. Local/dev runs may
 skip pinning (`REQUIRE_PINNED_SHA256=0`), which only emits a warning.
 
-**License posture — LGPL/non-GPL preferred.** Marquee invokes FFmpeg purely as
-a **separate child process** (subprocess; it never links `libav*`), so FFmpeg's
-license does not "infect" Marquee's own code. Even so, for a distributed
-product we prefer a clean LGPL / non-GPL build and avoid GPL-encumbered builds.
-The vendor script **fails the build** (fail-closed) if the fetched binary
-advertises `--enable-gpl` or `--enable-nonfree`, and also if it is missing any
+> These four variables are **already set** to the pinned FFmpeg 8.1.1 build in
+> the "Source (pinned)" table above (versioned URLs + verified `sha256`s).
+> Update them in lockstep whenever the bundled FFmpeg version changes.
+
+**License posture — GPLv3 allowed (arm's-length subprocess).** The shipped
+FFmpeg is licensed under the **GNU General Public License v3** (the pinned build
+is `--enable-gpl --enable-version3`, which makes the effective license GPLv3). That is fine for Marquee because Marquee invokes FFmpeg purely as a
+**separate child process** — it shells out to `ffmpeg`/`ffprobe` as standalone
+executables (`src/slideshow_gen/ffmpeg.py`, `media.py`) and **never links
+`libav*`** into its own code. Under the well-established GPL aggregation / "mere
+aggregation and exec" principle, the GPL's copyleft reaches only the ffmpeg
+binary itself, not Marquee's own (separately-licensed) code. Two further facts
+keep this clean:
+
+- **Free, direct-download distribution.** Marquee is distributed as a free,
+  direct-download, notarized `.app` — **not** through the Mac App Store. (GPL is
+  incompatible with the App Store's terms; sidestepping the App Store is what
+  makes shipping a GPL binary viable here.)
+- **We convey GPL compliance.** Because we redistribute a GPLv3 binary, the app
+  ships the full **GPLv3 license text** plus an attribution statement and a
+  **written offer for the corresponding source** (see "GPL compliance: what
+  ships with the app" below).
+
+What the vendor script still refuses: only `--enable-nonfree`, which produces a
+**genuinely non-redistributable** binary (e.g. nonfree-licensed codecs) we'd
+have no right to ship. It also still fails if the build is missing any
 capability the engine actually uses (`h264_videotoolbox`, `aac`, `drawtext`,
 `zoompan`, `sidechaincompress`, `overlay`). The exact `configuration:` line and
 `-buildconf` are printed into the CI log for an auditable record of the license
-+ feature set of the precise binary shipped.
++ feature set of the precise binary shipped (and to anchor the GPLv3 obligation
+to that exact build).
 
-> **⚠️ Human-gated, flagged for Adam.** A *prebuilt, verified LGPL* static
-> macOS/arm64 FFmpeg that also includes `drawtext` (libfreetype) is not a
-> settled, universally-available artifact. The default source above is a strong
-> candidate, but its license/feature posture is only *proven* when the
-> fail-closed guards run on a real `workflow_dispatch` build. **Confirm the
-> first signed build's vendor-step log** shows the guards passing (no
-> `--enable-gpl`, all features present). If the default source ever serves a
-> GPL build, the build fails loudly — point `FFMPEG_VENDOR_URL`/
-> `FFPROBE_VENDOR_URL` at a confirmed LGPL build, or wire a from-source LGPL
-> build (`./configure --disable-gpl --disable-nonfree --enable-videotoolbox
-> --enable-audiotoolbox --enable-libfreetype …`) as the fallback. Pinning a
-> versioned URL + `*_SHA256` (the four repo variables above) is **required** in
-> CI, not just recommended — the build will not run unverified in a
-> secrets-bearing job.
+**Documented future option — a self-built LGPL build.** Marquee encodes with
+`h264_videotoolbox` (Apple's hardware H.264 encoder), **not** libx264, and uses
+no GPL-only FFmpeg feature. So the GPL bits in the Riedl build
+(`--enable-libx264`, `--enable-gpl`) are not actually exercised by Marquee — a
+move to a self-built `--disable-gpl --disable-nonfree` **LGPL** build remains
+fully open as a future option (no x264 needed):
+
+```
+./configure --disable-gpl --disable-nonfree \
+  --enable-videotoolbox --enable-audiotoolbox \
+  --enable-libfreetype …
+```
+
+That would drop the GPLv3 obligation entirely, at the cost of building + signing
+FFmpeg from source ourselves rather than fetching a prebuilt artifact. Until/
+unless that's worth doing, the pinned GPL build above is the shipped posture.
+
+### GPL compliance: what ships with the app
+
+Because Marquee redistributes a GPLv3 FFmpeg binary, it conveys the GPLv3
+obligations with the app. Three artifacts are committed and wired into the Tauri
+bundle (`bundle.resources` in `tauri.conf.json`), so they land inside
+`Marquee.app/Contents/Resources/THIRD-PARTY/`:
+
+| Shipped file (in repo) | In the bundle | Purpose |
+| --- | --- | --- |
+| `desktop/src-tauri/resources/THIRD-PARTY/FFmpeg-COPYING.GPLv3.txt` | `Contents/Resources/THIRD-PARTY/FFmpeg-COPYING.GPLv3.txt` | The full, verbatim GNU GPL v3 license text. |
+| `desktop/src-tauri/resources/THIRD-PARTY/THIRD-PARTY-LICENSES.txt` | `Contents/Resources/THIRD-PARTY/THIRD-PARTY-LICENSES.txt` | Plain-text attribution + written offer for source, shipped inside the app. |
+| `THIRD-PARTY-LICENSES.md` (repo root) | — (repo-facing) | Same attribution + written offer, human-readable in the repo. |
+
+The attribution statement and the **written offer for the corresponding
+source** (FFmpeg 8.1.1 from <https://ffmpeg.org/releases/>, and on request) live
+in those files; keep them in sync with the pinned build above whenever the
+FFmpeg version changes. There is no in-app About panel today, so the bundled
+text files are the user-facing compliance surface; if/when an About/credits view
+is added to the Tauri frontend, it should link to or display
+`THIRD-PARTY/THIRD-PARTY-LICENSES.txt`.
 
 **Bundle-size delta.** A static `ffmpeg` + `ffprobe` adds roughly 80–120 MB to
 the `.app` (two ~40–70 MB static Mach-O binaries; exact size depends on the

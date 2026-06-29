@@ -46,7 +46,9 @@
     "externalBin": ["binaries/slideshow-gen"],
     "resources": {
       "resources/ffmpeg": "ffmpeg",
-      "resources/ffprobe": "ffprobe"
+      "resources/ffprobe": "ffprobe",
+      "resources/THIRD-PARTY/FFmpeg-COPYING.GPLv3.txt": "THIRD-PARTY/FFmpeg-COPYING.GPLv3.txt",
+      "resources/THIRD-PARTY/THIRD-PARTY-LICENSES.txt": "THIRD-PARTY/THIRD-PARTY-LICENSES.txt"
     },
     "macOS": {
       "frameworks": [],

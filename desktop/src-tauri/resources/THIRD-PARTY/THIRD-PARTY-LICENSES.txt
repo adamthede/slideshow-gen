@@ -1,0 +1,41 @@
+THIRD-PARTY LICENSES — Marquee
+==============================
+
+Marquee (by Thede Technologies, LLC) bundles third-party software. This file
+documents that software and its license obligations. It ships inside the app at
+Marquee.app/Contents/Resources/THIRD-PARTY/.
+
+
+FFmpeg
+------
+
+Marquee uses FFmpeg (https://ffmpeg.org), licensed under the GNU General Public
+License v3. Bundled build: FFmpeg 8.1.1, static macOS/arm64, from
+ffmpeg.martin-riedl.de — built with `--enable-gpl --enable-version3`, which makes
+the effective license GPL v3. The exact configure flags are reported by
+`ffmpeg -version`.
+
+The full text of the GNU General Public License, version 3, is included
+alongside this file as `FFmpeg-COPYING.GPLv3.txt`.
+
+Marquee invokes FFmpeg only as a separate command-line program (a child
+process); it does not link the FFmpeg libraries (libav*) into its own code.
+
+
+Written offer for corresponding source
+--------------------------------------
+
+The complete corresponding source code for the bundled FFmpeg build is the
+FFmpeg 8.1.1 source release, available from:
+
+    https://ffmpeg.org/releases/
+
+(file: ffmpeg-8.1.1.tar.xz and its signatures). This is the upstream source from
+which the distributed static macOS/arm64 binary is built.
+
+In addition, for a period of at least three years, Thede Technologies, LLC will
+provide, on request and for no more than the cost of physically performing
+source distribution, a complete machine-readable copy of the corresponding
+source code for the version of FFmpeg distributed with this copy of Marquee,
+matching the exact build shipped (as reported by `ffmpeg -version`). To make
+such a request, contact: athede@gmail.com.
