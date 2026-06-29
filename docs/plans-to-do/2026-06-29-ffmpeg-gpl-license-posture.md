@@ -1,7 +1,7 @@
 ---
 title: FFmpeg GPL license posture — relax vendor guard + GPLv2 attribution/source-offer
-status: "In Progress"
-linked_pr: ""
+status: "QA Needed"
+linked_pr: "https://github.com/adamthede/slideshow-gen/pull/15"
 impl-model: opus
 ---
 
