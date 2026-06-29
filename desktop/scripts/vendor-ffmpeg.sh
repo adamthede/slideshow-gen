@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Vendor a license-clean static FFmpeg + ffprobe for aarch64-apple-darwin into
-# Marquee's Tauri bundle-resource directory (E5.S7).
+# Vendor a static FFmpeg + ffprobe (GPL allowed; nonfree refused) for
+# aarch64-apple-darwin into Marquee's Tauri bundle-resource directory (E5.S7).
 #
 #   Output: <dest>/ffmpeg  and  <dest>/ffprobe   (default dest:
 #           desktop/src-tauri/resources, matching `bundle.resources` in
