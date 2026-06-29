@@ -110,6 +110,23 @@ fn classify_stdout_line(line: String) -> Option<SidecarMessage> {
     })
 }
 
+/// Locate a binary we ship as a Tauri bundle **resource** (FFmpeg / ffprobe).
+///
+/// Returns the on-disk path only when the file is actually present, so dev
+/// builds — which don't vendor FFmpeg — return `None` and the engine falls
+/// back to its own `PATH` lookup (see `slideshow_gen/ffbin.py`). Tauri maps a
+/// configured resource into the bundle's resource directory; depending on how
+/// the mapping is expressed it can land at the resource-dir root or under a
+/// mirrored sub-path, so we probe both.
+fn bundled_binary(app: &AppHandle, name: &str) -> Option<std::path::PathBuf> {
+    let resource_dir = app.path().resource_dir().ok()?;
+    let candidates = [
+        resource_dir.join(name),
+        resource_dir.join("resources").join(name),
+    ];
+    candidates.into_iter().find(|p| p.is_file())
+}
+
 /// Spawn the sidecar with the given arguments and wire its stdout/stderr
 /// to the frontend via `SIDECAR_EVENT`.
 ///
@@ -125,11 +142,23 @@ pub fn spawn_sidecar(app: &AppHandle, args: Vec<String>) -> Result<(), String> {
         return Err("A scan or render is already in progress".into());
     }
 
-    let sidecar = app
+    let mut sidecar = app
         .shell()
         .sidecar("slideshow-gen")
         .map_err(|e| format!("Failed to resolve sidecar: {e}"))?
         .args(args);
+
+    // Point the engine at the signed FFmpeg/ffprobe we ship inside the bundle
+    // so a clean Mac with nothing on PATH can still render (E5.S7). `.env()`
+    // augments the inherited environment, so PATH and friends are preserved;
+    // we only set these when the bundled binary is actually present, letting
+    // dev builds fall through to the engine's PATH lookup.
+    if let Some(ffmpeg) = bundled_binary(app, "ffmpeg") {
+        sidecar = sidecar.env("FFMPEG_BINARY", ffmpeg);
+    }
+    if let Some(ffprobe) = bundled_binary(app, "ffprobe") {
+        sidecar = sidecar.env("FFPROBE_BINARY", ffprobe);
+    }
 
     let (mut rx, child) = sidecar
         .spawn()

@@ -7,6 +7,8 @@ from pathlib import Path
 
 from PIL import Image
 
+from .ffbin import ffprobe_binary
+
 
 @dataclass
 class ImageInfo:
@@ -40,7 +42,7 @@ def get_video_info(path: Path) -> VideoInfo | None:
     try:
         result = subprocess.run(
             [
-                "ffprobe", "-v", "error",
+                ffprobe_binary(), "-v", "error",
                 "-show_entries", "stream=width,height,codec_type",
                 "-show_entries", "format=duration",
                 "-of", "json",
