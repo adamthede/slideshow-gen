@@ -117,8 +117,9 @@ FFMPEG="$DEST/ffmpeg"
 # --- Executability smoke check: fail fast with a clear message on a corrupt /
 # non-runnable download (arch or dynamic-linking issue). This must run BEFORE
 # the license guard: if the binary can't execute, its `-version` is empty and
-# the GPL-detection grep below would silently pass (a no-op), so the guard is
-# only trustworthy once we know the binary actually runs. ---
+# the --enable-nonfree grep below would silently pass (a no-op), so the guard is
+# only trustworthy once we know the binary actually runs. (The empty-CONFIG_LINE
+# check in the license guard is a second backstop for the same failure mode.) ---
 "$FFMPEG" -hide_banner -version >/dev/null 2>&1 \
   || fail "vendored ffmpeg cannot execute on this host (corrupt download or arch/linking issue)"
 "$DEST/ffprobe" -hide_banner -version >/dev/null 2>&1 \
@@ -152,15 +153,20 @@ fi
 log "License guard passed: no --enable-nonfree (GPL is allowed for arm's-length subprocess distribution)."
 
 # --- Feature guards: every capability the engine actually invokes. ---
-# Snapshot the tables ONCE, then match with a here-string (not a live
-# `ffmpeg | grep -q` pipe). `grep -q` exits on first match; against a still-
+# Snapshot the tables ONCE, then match each feature with a here-string (not a
+# live `ffmpeg | grep -q` pipe). `grep -q` exits on first match; against a still-
 # writing ffmpeg that closes the pipe early and SIGPIPEs ffmpeg (exit 141),
 # which under `set -o pipefail` propagates and fails the pipeline even though
 # the feature IS present — a real, timing-dependent false negative (it bit the
 # earliest-listed filter, sidechaincompress, on a real vendor run). A here-
 # string has no upstream writer process, so there's no SIGPIPE race.
-FF_ENCODERS="$("$FFMPEG" -hide_banner -encoders 2>/dev/null || true)"
-FF_FILTERS="$("$FFMPEG"  -hide_banner -filters  2>/dev/null || true)"
+#
+# The captures themselves fail CLOSED (no `|| true`): command substitution reads
+# ffmpeg to EOF — there's no early pipe close, so no SIGPIPE here — which means a
+# non-zero exit is a genuine execution failure. Surface it with a clear message
+# rather than swallowing it and tripping a vague "missing required encoder" below.
+FF_ENCODERS="$("$FFMPEG" -hide_banner -encoders 2>/dev/null)" || fail "could not run vendored ffmpeg -encoders (corrupt download or arch/linking issue)"
+FF_FILTERS="$("$FFMPEG"  -hide_banner -filters  2>/dev/null)" || fail "could not run vendored ffmpeg -filters (corrupt download or arch/linking issue)"
 require_encoder() { grep -qw -- "$1" <<<"$FF_ENCODERS" || fail "FFmpeg build missing required encoder: $1"; }
 require_filter()  { grep -qw -- "$1" <<<"$FF_FILTERS"  || fail "FFmpeg build missing required filter: $1"; }
 
