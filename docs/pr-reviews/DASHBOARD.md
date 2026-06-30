@@ -4,19 +4,19 @@
 ## Active PRs
 | PR | Title | Cycles | Status | Last Cycle | Actioned | Ratio |
 |----|-------|--------|--------|------------|----------|-------|
-| #15 | feat(ffmpeg): allow GPL build, ship GPLv3 attribution + source offer | 3 | MERGEABLE — 0 unresolved (final Gemini pass watched) | 2026-06-29 | 5 | 100% |
+| #17 | ci(release): install Developer ID G2 intermediate so codesign embeds full chain | 2 | READY TO MERGE (Copilot quota-blocked; Gemini-only coverage) | 2026-06-29 | 0 | 0% |
 
 ## Cumulative Bot Effectiveness
 | Reviewer | Total Comments | T1 | T2 | T3 | T4 | Actioned % | Signal:Noise |
 |----------|---------------|----|----|----|----|-----------|-------------|
 | Copilot | 65 | 6 | 51 | 3 | 5 | 88% | 57:8 |
-| Gemini | 87 | 1 | 42 | 11 | 33 | 49% | 43:44 |
+| Gemini | 88 | 1 | 42 | 11 | 34 | 49% | 43:45 |
 
 ## Top Issue Categories (Across All PRs)
 | Category | T1+T2 (Actioned) | T3+T4 (Noise) | Total | Actioned % |
 |----------|-------------------|----------------|-------|-----------|
 | data-integrity | 26 | 5 | 31 | 84% |
-| documentation | 19 | 5 | 24 | 79% |
+| documentation | 19 | 6 | 25 | 76% |
 | error-handling | 23 | 3 | 26 | 88% |
 | licensing/compliance | 1 | 0 | 1 | 100% |
 | style | 10 | 32 | 42 | 24% |
@@ -49,3 +49,4 @@
 | #9 | Design pass — Summary section polish (de-card + glyphs) | 4 | MERGED (was READY TO MERGE) | 1 |
 | #11 | Design pass move #3 — date-range timeline + density histogram | 3 | MERGED (was READY TO MERGE) | 4 |
 | #14 | Epic 5.S7 — bundle a signed FFmpeg into Marquee.app | 5 | MERGED (was READY TO MERGE) | 5 |
+| #15 | feat(ffmpeg): allow GPL build, ship GPLv3 attribution + source offer | 3 | MERGED (was READY TO MERGE) | 5 |
