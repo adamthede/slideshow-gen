@@ -155,14 +155,25 @@ jobs:
           # into the build keychain. The .p12 holds only the leaf cert + private key;
           # this intermediate is NOT a built-in macOS root, so without it codesign
           # cannot assemble the full chain — find-identity reports "0 valid" and any
-          # signature it does produce can fail Gatekeeper on Macs that haven't cached
-          # the intermediate. Fail closed if Apple serves something unexpected.
+          # signature it produces can fail Gatekeeper on Macs that haven't cached it.
+          #
+          # This is a download on a runner that holds the Apple signing secrets, so
+          # it follows the same supply-chain rule as vendor-ffmpeg.sh: pin the
+          # SHA256 and fail closed. The pin is stable for the life of the signing
+          # leaf (G2 is valid to 2031-09-17, and a fixed leaf chains to a fixed
+          # intermediate). An exact-hash pin subsumes any subject/issuer check.
           INTERMEDIATE_PATH="$RUNNER_TEMP/DeveloperIDG2CA.cer"
+          INTERMEDIATE_SHA256="f16cd3c54c7f83cea4bf1a3e6a0819c8aaa8e4a1528fd144715f350643d2df3a"
           curl --fail --location --silent --show-error --retry 3 \
             -o "$INTERMEDIATE_PATH" https://www.apple.com/certificateauthority/DeveloperIDG2CA.cer
-          openssl x509 -inform der -in "$INTERMEDIATE_PATH" -noout -subject \
-            | grep -q "Developer ID Certification Authority" \
-            || { echo "Fetched intermediate is not the Developer ID CA; aborting." >&2; exit 1; }
+          ACTUAL_SHA256="$(shasum -a 256 "$INTERMEDIATE_PATH" | awk '{ print $1 }')"
+          if [ "$ACTUAL_SHA256" != "$INTERMEDIATE_SHA256" ]; then
+            echo "Developer ID G2 intermediate SHA256 mismatch — refusing to import:" >&2
+            echo "  expected $INTERMEDIATE_SHA256" >&2
+            echo "  actual   $ACTUAL_SHA256" >&2
+            echo "If Apple legitimately rotated the intermediate, update the pin." >&2
+            exit 1
+          fi
           security import "$INTERMEDIATE_PATH" -t cert -f x509 -k "$KEYCHAIN_PATH"
 
           # Make the new keychain the default + first in the search path.
@@ -176,11 +187,16 @@ jobs:
           # Sanity-check a *valid* signing identity is present. `find-identity -v`
           # only lists identities with a complete, trusted chain, so this fails the
           # job early (rather than mid-notarization) if the intermediate import or
-          # the .p12 import went wrong.
-          security find-identity -v -p codesigning "$KEYCHAIN_PATH"
-          security find-identity -v -p codesigning "$KEYCHAIN_PATH" \
-            | grep -q "Developer ID Application" \
-            || { echo "No valid Developer ID Application identity after import (broken chain?); aborting." >&2; exit 1; }
+          # the .p12 import went wrong. Snapshot the output and match a here-string
+          # rather than `find-identity | grep -q`: under `set -o pipefail`, grep -q
+          # closing the pipe early can SIGPIPE find-identity and turn a present
+          # identity into a spurious job failure.
+          IDENTITIES="$(security find-identity -v -p codesigning "$KEYCHAIN_PATH")"
+          echo "$IDENTITIES"
+          case "$IDENTITIES" in
+            *"Developer ID Application"*) : ;;
+            *) echo "No valid Developer ID Application identity after import (broken chain?); aborting." >&2; exit 1 ;;
+          esac
 
       - name: Sign the PyInstaller sidecar (hardened runtime)
         # E5.S2 — sign the frozen sidecar inside-out BEFORE the Tauri build so
