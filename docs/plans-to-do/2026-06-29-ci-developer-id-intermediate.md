@@ -1,8 +1,8 @@
 ---
 title: CI signing — install Developer ID G2 intermediate so codesign embeds the full chain
-status: "In Progress"
+status: "QA Needed"
 completed:
-linked_pr:
+linked_pr: "https://github.com/adamthede/slideshow-gen/pull/17"
 impl-model: opus
 ---
 
