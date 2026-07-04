@@ -1,6 +1,7 @@
 ---
 title: E5.S3 — Hardened runtime + minimal entitlements
-status: "QA Needed"
+status: "Done"
+completed: 2026-07-04
 linked_pr: "https://github.com/adamthede/slideshow-gen/pull/16"
 impl-model: sonnet
 ---

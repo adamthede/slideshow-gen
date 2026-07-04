@@ -1,6 +1,7 @@
 ---
 title: Epic 4.S5 — post-render result view + Move #6 render report
-status: QA Needed
+status: "Done"
+completed: 2026-05-29
 linked_pr: "https://github.com/adamthede/slideshow-gen/pull/10"
 ---
 
