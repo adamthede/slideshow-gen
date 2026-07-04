@@ -72,13 +72,18 @@ echo "[build-sidecar] Signing with: $SIGNING_IDENTITY"
 # extracts a Python framework to a temp dir and dlopens it at startup.
 # Under hardened runtime, dlopen rejects libraries whose Team ID doesn't
 # match the parent process unless `disable-library-validation` is granted.
-# Python.framework as bundled by PyInstaller is signed with Apple's
+# Python.framework as bundled by PyInstaller is signed with the PSF's
 # Team ID, so without this entitlement, the sidecar fails to launch.
+#
+# Uses binary-entitlements.plist (E5.S3): the nested-binary entitlements
+# file granting only disable-library-validation. This mirrors the sidecar
+# signing step in release.yml exactly. See docs/release-pipeline.md
+# "Hardened Runtime & Entitlements".
 codesign \
   --force \
   --options runtime \
   --timestamp \
-  --entitlements "$DESKTOP_DIR/src-tauri/entitlements.plist" \
+  --entitlements "$DESKTOP_DIR/src-tauri/binary-entitlements.plist" \
   --sign "$SIGNING_IDENTITY" \
   "$OUTPUT_PATH"
 

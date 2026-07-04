@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <!-- Tauri shell (Contents/MacOS/Marquee) entitlements — intentionally empty.
+       The Tauri/WebKit shell is a self-contained binary that loads only
+       Apple-signed or Developer-ID-signed Tauri plugin libraries. It does not
+       dlopen any third-party library at runtime, so library-validation (the
+       default hardened-runtime restriction) is not a problem.
+
+       No sandbox: Marquee is distributed direct-download, not via the App Store.
+       File access works via the Tauri dialog plugin and full-disk Finder paths.
+       Child process spawn (→ slideshow-gen sidecar) is allowed by default under
+       the hardened runtime — no extra entitlement required.
+
+       If the notary log names a missing entitlement, add only that one here. -->
+</dict>
+</plist>

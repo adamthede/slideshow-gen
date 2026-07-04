@@ -121,6 +121,71 @@ All four should report success and reference the Developer ID identity.
 3. Trigger a small render to confirm the embedded `slideshow-gen` sidecar
    spawns and exits cleanly.
 
+## Hardened Runtime & Entitlements (E5.S3)
+
+Every Mach-O binary in the bundle is signed with `--options runtime` (hardened
+runtime), which is required for Apple notarization. Entitlements follow the
+principle of **least privilege**: each binary gets only the entitlement it
+actually needs. Two separate plist files (E5.S3) replace the previous
+single-file approach.
+
+### Entitlement files
+
+| File | Applied to | Content |
+|------|-----------|---------|
+| `app-entitlements.plist` | `Contents/MacOS/Marquee` (Tauri shell) — via `tauri.conf.json bundle.macOS.entitlements` | Empty — no entitlements |
+| `binary-entitlements.plist` | `binaries/slideshow-gen` sidecar + `resources/ffmpeg` + `resources/ffprobe` — via `--entitlements` in `release.yml` | `com.apple.security.cs.disable-library-validation: true` |
+
+### Why each binary gets what it gets
+
+**Tauri shell (`Contents/MacOS/Marquee`) — no entitlements**
+
+The Tauri/WebKit shell is a self-contained binary. It loads only Apple-signed
+system frameworks (WebKit, CoreFoundation) and Developer-ID-signed Tauri plugin
+libraries bundled inside the app. Every library it loads satisfies hardened
+runtime's default policy (must be signed by Apple or same team). No entitlements
+are required.
+
+**PyInstaller sidecar — `disable-library-validation`**
+
+`codesign --options runtime` on the sidecar sets the hardened runtime flag, which
+makes the loader require that every library loaded via `dlopen` is signed by
+the same team as the calling binary (Developer ID `U85N54PC5J`) or by Apple.
+The PyInstaller `--onefile` bootloader extracts `Python.framework` (signed by
+the Python Software Foundation, not `U85N54PC5J`) into a temp dir at launch and
+`dlopen`s it — this fails the default hardened-runtime check.
+`disable-library-validation` relaxes that check, allowing libraries signed by
+any team to load. This is the standard, documented entitlement for
+PyInstaller-frozen Python under hardened runtime.
+
+**Vendored `ffmpeg` / `ffprobe` — `disable-library-validation` (harmless, applied for uniformity)**
+
+Static FFmpeg on macOS still `dlopen`s Apple-signed system frameworks at runtime
+(`VideoToolbox`, `CoreMedia`, `CoreVideo`, `AudioToolbox`). Apple-signed
+frameworks are **always permitted** under the hardened runtime regardless of
+`disable-library-validation` — this entitlement is not needed for FFmpeg's
+correct operation. It is applied anyway so all nested binaries share one
+entitlements file.
+
+### Why no other entitlements are needed
+
+| Entitlement | Status | Reason |
+|-------------|--------|--------|
+| `com.apple.security.cs.allow-jit` | **Not needed** | Python 3.11 has no JIT compiler; PyInstaller does not use W^X memory |
+| `com.apple.security.cs.allow-unsigned-executable-memory` | **Not needed** | Same — no runtime code generation |
+| `com.apple.security.cs.disable-executable-page-protection` | **Not needed** | Same |
+| `com.apple.security.network.client` | **Not needed** | Marquee is fully offline; sidecar makes no network calls |
+| `com.apple.security.files.user-selected.*` | **Not needed** | App is not sandboxed; file access is unrestricted |
+| Any sandbox entitlement | **Not needed** | Direct-download distribution, not App Store; no sandbox |
+| Spawn / exec entitlement | **Not needed** | `fork`/`exec` to spawn child processes (sidecar → ffmpeg) is always permitted under the hardened runtime when the child is a properly signed binary. No entitlement is required for the parent or the child |
+
+### What to do if notarization names a missing entitlement
+
+Add **only** what the failure log explicitly names to `binary-entitlements.plist`
+(for a sidecar/FFmpeg issue) or `app-entitlements.plist` (for a Tauri shell
+issue). Do not add speculatively. The table above records the current rationale
+so any new addition has a clear burden of justification.
+
 ## Signing coverage (E5.S2)
 
 Every executable code object inside `Marquee.app` must be signed with the
@@ -288,22 +353,18 @@ required.** (The `--onedir` migration remains a possible future change only if
 cold-start latency ever becomes a UX problem — unrelated to signing.)
 
 ## Known unknowns
-- **Entitlements coverage.** `entitlements.plist` currently grants only
-  `com.apple.security.cs.disable-library-validation`. That's the
-  entitlement PyInstaller-frozen binaries typically need. If notarization
-  surfaces a different requirement (e.g. `allow-jit`,
-  `allow-unsigned-executable-memory`), add only what the failure log
-  names — don't blanket-grant.
 - **First run end-to-end.** No part of this pipeline has been exercised
   with real Apple credentials yet. The first tag push is the real test.
-- **Bundled FFmpeg deep-verify + notarization (E5.S7).** The signed FFmpeg
+  ~~Entitlements coverage~~ — resolved in E5.S3; see "Hardened Runtime &
+  Entitlements" above. If notarization surfaces an unexpected requirement,
+  the section above records the rationale baseline and action path.
+- **Bundled FFmpeg signing + notarization (E5.S7).** The signed FFmpeg
   path has not been exercised with real Apple credentials. The first
   `workflow_dispatch` build must confirm: (a) the vendor-step license/feature
   guards pass, (b) `codesign --verify --deep --strict` accepts the bundled,
   signed `ffmpeg`/`ffprobe`, and (c) notarization does not name an extra
-  entitlement for the FFmpeg child process. A static `ffmpeg` calling Apple's
-  VideoToolbox should need nothing beyond the current entitlements, but the
-  notary log is the source of truth — add only what it names.
+  entitlement. See "Hardened Runtime & Entitlements" for the expected
+  answer (none needed) and the action path if wrong.
 - **Clean-Mac render.** The end goal — opening the notarized `Marquee.app` on
   a Mac with **no `ffmpeg` on `PATH`** and completing a small render — can only
   be verified on a clean machine after a real signed build. Until then the

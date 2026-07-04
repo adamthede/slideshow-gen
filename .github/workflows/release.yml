@@ -199,22 +199,22 @@ jobs:
           esac
 
       - name: Sign the PyInstaller sidecar (hardened runtime)
-        # E5.S2 — sign the frozen sidecar inside-out BEFORE the Tauri build so
-        # the bundler embeds an already-signed, hardened-runtime binary. This
-        # mirrors desktop/scripts/build-sidecar.sh exactly:
+        # E5.S2/E5.S3 — sign the frozen sidecar inside-out BEFORE the Tauri
+        # build so the bundler embeds an already-signed, hardened-runtime binary.
         #   --options runtime    -> hardened runtime (required for notarization)
-        #   --entitlements …     -> disable-library-validation, so the
-        #                           PyInstaller bootloader can dlopen the
-        #                           Apple-signed Python.framework it extracts
-        #                           (see ADR-0002 "Signing under hardened runtime")
+        #   --entitlements …     -> binary-entitlements.plist: grants only
+        #                           disable-library-validation (E5.S3), the one
+        #                           entitlement the PyInstaller bootloader needs to
+        #                           dlopen the PSF-signed Python.framework it
+        #                           extracts at launch. See docs/release-pipeline.md
+        #                           "Hardened Runtime & Entitlements".
         #   --timestamp          -> secure timestamp (Apple notary requirement)
         #
         # The sidecar is a PyInstaller --onefile binary: the Python framework
         # and dylibs live INSIDE the binary's appended PKG archive, not as
         # separate on-disk Mach-O files, so the single signature here covers
         # them and `codesign --verify --deep --strict` finds no unsigned nested
-        # code (verified empirically — see docs/release-pipeline.md "Signing
-        # coverage"). No --onedir rewrite is required.
+        # code. No --onedir rewrite is required.
         env:
           APPLE_SIGNING_IDENTITY: ${{ env.APPLE_SIGNING_IDENTITY }}
         run: |
@@ -228,7 +228,7 @@ jobs:
             --force \
             --options runtime \
             --timestamp \
-            --entitlements desktop/src-tauri/entitlements.plist \
+            --entitlements desktop/src-tauri/binary-entitlements.plist \
             --sign "$APPLE_SIGNING_IDENTITY" \
             "$SIDECAR"
           # Confirm the sidecar alone passes deep-strict before it's embedded.
@@ -236,17 +236,18 @@ jobs:
           codesign -dvvv "$SIDECAR" 2>&1 | grep -E "Authority|flags|TeamIdentifier" || true
 
       - name: Sign vendored FFmpeg + ffprobe (hardened runtime)
-        # E5.S7 — the bundled ffmpeg/ffprobe are nested Mach-O executables that
-        # land in Marquee.app/Contents/Resources. Sign them inside-out BEFORE
-        # the Tauri build (exactly like the sidecar) so the bundler embeds
-        # already-signed, hardened-runtime binaries and the E5.S2 deep-verify
-        # gate passes them. Same flags as the sidecar:
-        #   --options runtime  -> hardened runtime (notarization requirement)
-        #   --timestamp        -> secure timestamp
-        #   --entitlements …   -> disable-library-validation (a static ffmpeg
-        #                         that dlopens any Apple-signed system lib under
-        #                         the hardened runtime needs this; harmless if
-        #                         not, and keeps signing identical to the sidecar)
+        # E5.S7/E5.S3 — the bundled ffmpeg/ffprobe are nested Mach-O executables
+        # that land in Marquee.app/Contents/Resources. Sign them inside-out BEFORE
+        # the Tauri build so the bundler embeds already-signed, hardened-runtime
+        # binaries and the E5.S2 deep-verify gate passes them.
+        #   --options runtime    -> hardened runtime (notarization requirement)
+        #   --timestamp          -> secure timestamp
+        #   --entitlements …     -> binary-entitlements.plist (E5.S3): grants
+        #                           disable-library-validation. Harmless for a
+        #                           static ffmpeg (it only dlopens Apple-signed
+        #                           system frameworks, always permitted), but
+        #                           applied uniformly to all nested binaries for
+        #                           consistency. See docs/release-pipeline.md.
         env:
           APPLE_SIGNING_IDENTITY: ${{ env.APPLE_SIGNING_IDENTITY }}
         run: |
@@ -258,7 +259,7 @@ jobs:
               --force \
               --options runtime \
               --timestamp \
-              --entitlements desktop/src-tauri/entitlements.plist \
+              --entitlements desktop/src-tauri/binary-entitlements.plist \
               --sign "$APPLE_SIGNING_IDENTITY" \
               "$bin"
             codesign --verify --strict --verbose=2 "$bin"
