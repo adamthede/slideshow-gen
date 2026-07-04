@@ -11,22 +11,22 @@ A **notarized, downloadable `Marquee.app`** a user can drag to `/Applications`, 
 - **Loop recipe:** implement one story → `/verify` (run `pytest tests/` *scoped* - bare `pytest` fails on a vendored BMAD self-test) → open PR (request+verify Copilot; Gemini/CodeRabbit auto) → `/review-cycle` to convergence → **stop at the human merge gate.**
 - **Optional `/goal`:** e.g. `Epic 5 stories S3–S6 shipped as merge-ready PRs, or 20 turns` - note this **excludes the notarization run itself** (see wall).
 
-## ⚠️ The wall (human-only)
-- **Notarization needs Adam's Apple secrets** in GitHub (5 secrets - `APPLE_CERTIFICATE_P12_BASE64`, etc.; see `docs/release-pipeline.md`). The first real `v*.*.*` tag push **is the test** - it has never been run. Treat notarization as a **deliberate Adam-in-the-loop step**, not autonomous.
-- The signing gate (E5.S2) is wired but **unproven against a real bundle** - run a `workflow_dispatch` CI run (no release) with the Apple cert once, to exercise it end-to-end.
-- `--onefile` deep-signing: **resolved** (passes; no `--onedir` rewrite needed).
+## ✅ The wall is CLEARED (2026-06-30)
+- **Notarization is proven end-to-end.** Apple secrets are set in GitHub, the .p12 is in 1Password, and a `workflow_dispatch` run of "Release (sign + notarize)" passed every stage on 2026-06-30: import Developer-ID cert → sign sidecar + vendored FFmpeg → signed Tauri bundle → deep-verify → **notarytool → staple → Gatekeeper accepted** → artifact uploaded. Run: https://github.com/adamthede/slideshow-gen/actions/runs/28450150115 (wrap-up doc on main).
+- The only remaining human release step: **push a `v*.*.*` tag** — the same workflow runs and attaches the notarized app to a draft GitHub release.
+- `--onefile` deep-signing: resolved (passes; no `--onedir` rewrite needed).
 
-## Current state (2026-07-04)
-- ~85–90% through the roadmap. **Engine (E0) done.** Epics 1, 2, 4 shipped. **E5.S1** (build/sign/notarize workflow) shipped.
-- **Recently shipped:** **E5.S2** code-signing hygiene (PR #13, 2026-06-26); **CI Developer-ID G2 intermediate** so codesign embeds the full chain (PR #17, 2026-06-30); **E5.S3** hardened runtime + minimal entitlements (**PR #16, 2026-07-04**).
-- **Drafted, loop-ready:** **E5.S7 - bundle a signed FFmpeg** (`docs/plans-to-do/2026-06-26-e5-s7-bundle-ffmpeg.md`).
+## Current state (2026-07-04, corrected)
+- ~90–95% through the roadmap. **Engine (E0) done.** Epics 1, 2, 4 shipped. **E5.S1** (build/sign/notarize workflow) shipped and **proven live**.
+- **Shipped:** **E5.S2** code-signing hygiene (PR #13, 06-26); **E5.S7** bundled signed FFmpeg (**PR #14, 06-29**); **CI Developer-ID G2 intermediate** (PR #17, 06-30); **E5.S3** hardened runtime + minimal entitlements (PR #16, 07-04).
 
 ## Ordered remaining path
-1. **E5.S7 - bundle FFmpeg** *(real distribution blocker: the app resolves ffmpeg from `PATH` and doesn't bundle it, so a clean Mac render fails "FFmpeg not found").*
-2. **E5.S4** - signed/stapled DMG, drag-to-Applications. ← **next up** now that S3 (hardened runtime) shipped.
-3. **E5.S5** - Tauri auto-updater (signed manifest).
-4. **E5.S6** - release docs / changelog.
-5. **Notarization run** - Adam-in-the-loop; set the Apple secrets, push a tag, fix whatever the notary log names.
+1. **E5.S4 - signed/stapled DMG, drag-to-Applications.** ← the only remaining engineering blocker for a public download.
+2. **E5.S6 - release docs / changelog.**
+3. **E5.S5 - Tauri auto-updater** — *consider deferring past v1.0*: with no updater, updates ship as fresh downloads; don't let it gate the first release.
+4. **`v1.0.0` tag push** (Adam, ~5 min) → draft GitHub release with the notarized app.
+5. **thedetech product page** — download link + screenshots; Marquee becomes a published Thede Technologies product.
+- *Queued small follow-up: delete orphaned `desktop/src-tauri/entitlements.plist` + update stale doc refs (README, architecture-app.md, ADR-0002, release-pipeline.md).*
 - *Out of scope: Epic 3 (browse/exclude grid) - PRD marks optional; recommend cut. `kburns/` sibling dir = historical prior art, ignore.*
 
 ## Queued small tasks
