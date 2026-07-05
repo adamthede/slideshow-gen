@@ -90,7 +90,7 @@ Pulled out of ADR-0001 for quick recall:
 
 - App is **not sandboxed** for v1 (direct-download distribution).
 - **Hardened runtime** is on for both the main binary and the sidecar (notarization requires it).
-- `com.apple.security.cs.disable-library-validation` is granted on both binaries because PyInstaller's onefile bootloader extracts an Apple-signed `Python.framework` to a temp dir and dlopens it at startup. Under hardened runtime without this entitlement, the Team ID mismatch causes the load to fail. See `src-tauri/entitlements.plist`.
+- `com.apple.security.cs.disable-library-validation` is granted to the **sidecar** (via `src-tauri/binary-entitlements.plist`) because PyInstaller's onefile bootloader extracts an Apple-signed `Python.framework` to a temp dir and dlopens it at startup. Under hardened runtime without this entitlement, the Team ID mismatch causes the load to fail. The Tauri shell binary needs no entitlement and gets a separate, empty `src-tauri/app-entitlements.plist` (E5.S3). See `docs/release-pipeline.md` → "Hardened Runtime & Entitlements".
 - **No network access at runtime.** Reverse geocoding uses the bundled `rg_cities1000.csv`. No telemetry. NFR4 baked into the architecture.
 
 ## Distribution

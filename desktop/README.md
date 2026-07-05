@@ -83,7 +83,8 @@ desktop/
 │   │   └── sidecar.rs        # JSON-line parser + event forwarder
 │   ├── binaries/             # PyInstaller output (gitignored)
 │   ├── capabilities/         # Tauri 2 permission grants
-│   ├── entitlements.plist    # Hardened-runtime entitlements
+│   ├── app-entitlements.plist    # Tauri shell entitlements (empty — E5.S3)
+│   ├── binary-entitlements.plist # Sidecar + FFmpeg entitlements (E5.S3)
 │   └── tauri.conf.json       # Bundle config, signing identity, externalBin
 ├── scripts/
 │   ├── build-sidecar.sh      # PyInstaller + codesign

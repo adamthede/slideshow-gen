@@ -76,7 +76,7 @@ code signature in 'Python' not valid for use in process:
 mapping process and mapped file (non-platform) have different Team IDs
 ```
 
-The entitlement is in `desktop/src-tauri/entitlements.plist` and is applied to both the Marquee main binary and the sidecar (Tauri uses the same entitlements file for both, by convention).
+The entitlement lives in `desktop/src-tauri/binary-entitlements.plist` and is applied to the **sidecar** (and the vendored FFmpeg/ffprobe). Since E5.S3 the entitlements are split: the Tauri shell binary gets a separate, **empty** `app-entitlements.plist` — it is a clean hardened-runtime binary that needs no entitlement. (Originally a single `entitlements.plist` was applied to both; E5.S3 removed the unnecessary grant from the shell. See `docs/release-pipeline.md` → "Hardened Runtime & Entitlements".)
 
 ## Consequences
 
