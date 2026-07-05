@@ -24,12 +24,17 @@ won't ship a broken build.
 
 ### 1. Bump the version (if it changed)
 
-The tag you push should match the app version. Set both to the same value:
+The tag you push should match the app version. Set all three to the same value:
 
-- `desktop/src-tauri/tauri.conf.json` → `"version"`
+- `desktop/src-tauri/tauri.conf.json` → `"version"` — this is the one Tauri
+  uses for the bundle + DMG filename (an explicit `version` here overrides
+  Cargo.toml).
 - `desktop/package.json` → `"version"`
+- `desktop/src-tauri/Cargo.toml` → `version` (under `[package]`) — kept in sync
+  for consistent crate metadata; not build-breaking if missed, but don't leave
+  it stale.
 
-For the first public release, set both to `1.0.0`. Commit on `main`:
+For the first public release, set all three to `1.0.0`. Commit on `main`:
 
 ```bash
 git commit -am "chore(release): bump Marquee to 1.0.0"

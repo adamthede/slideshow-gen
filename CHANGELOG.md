@@ -12,7 +12,10 @@ _Deliberately deferred past v1.0:_
 - **Auto-updater (E5.S5).** No in-app "Check for Updates" yet. Until it lands,
   a new version ships as a fresh download from the GitHub Releases page.
 
-## [1.0.0] - 2026-07
+## [1.0.0]
+
+> Release date (`YYYY-MM-DD`) is filled in when the `v1.0.0` tag is cut and the
+> draft release is published.
 
 First public release of **Marquee** — the macOS desktop app that turns folders
 of photos and videos into MP4 slideshows, wrapping the proven `slideshow-gen`
