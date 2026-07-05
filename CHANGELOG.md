@@ -23,15 +23,15 @@ Python engine as a signed sidecar. Direct download, notarized, 100% offline.
 - **Drag-and-drop or pick folders.** Point Marquee at one or more source
   folders; optional recursive scanning. (FR1)
 - **Pre-render summary before you commit.** Image/video counts, duplicates
-  removed, date range, GPS coverage, and estimates for slideshow duration,
-  output file size, and render time — so a long render is a conscious choice.
-  (FR2, FR4)
+  removed, date range, GPS coverage, and estimates for slideshow duration and
+  output file size — so a long render is a conscious choice. (FR2, FR4)
 - **Render settings.** Output resolution (1080p / 4K), slide duration, fade
   duration, FPS, output destination, background audio track + volume, recursive
   scan, batch size. Defaults match the CLI. (FR4)
 - **Live render progress + cancel.** Phase indicator (discovery → image clips →
-  batching → composite), current item, percentage, and ETA streamed from the
-  engine. Cancel cleans up partial temp output. (FR5)
+  batching → composite), current item, percentage, and a per-phase ETA the app
+  derives from the engine's streamed progress. Cancel cleans up partial temp
+  output. (FR5)
 - **Per-item failure tolerance.** A single unreadable photo is skipped with a
   logged warning instead of aborting the whole render. (FR5, NFR5)
 - **In-app result view.** The finished MP4 previews inside the app; "Reveal in
@@ -80,7 +80,6 @@ The CLI remains the canonical engine surface; the app drives it as a sidecar
 over a versioned JSON-line IPC contract. Engine work that shipped for v1:
 
 - Pre-render summary + `--estimate-only` (E0.S1)
-- Render-time calibration / ETA (E0.S3)
 - Library-callable `RenderPipeline` driven by an injected `Reporter` (E0.S5)
 - `--ipc` versioned event stream, schema-locked by tests (E0.S6)
 
