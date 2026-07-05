@@ -34,27 +34,44 @@ direct-download distribution. Defined in
 7. **Signs the vendored `ffmpeg` + `ffprobe`** with the same Developer ID
    identity, hardened runtime, timestamp, and entitlements — inside-out,
    before the bundle, so the deep-verify gate exercises them. (E5.S7.)
-8. Runs `npm run tauri build -- --target aarch64-apple-darwin`. Tauri's
-   bundler copies the signed FFmpeg resources into `Contents/Resources/`
-   (preserving their signatures) and signs `Marquee.app` using the keychain
-   identity and the `entitlements.plist` already wired in `tauri.conf.json`.
+8. Runs `npm run tauri build -- --target aarch64-apple-darwin --bundles app`
+   — **the `.app` only, not the DMG yet** (E5.S4; see "DMG packaging" below
+   for why the DMG is deferred). Tauri's bundler copies the signed FFmpeg
+   resources into `Contents/Resources/` (preserving their signatures) and signs
+   `Marquee.app` using the keychain identity and the `app-entitlements.plist`
+   wired in `tauri.conf.json`.
 9. **Deep-verify gate (pre-notarize):** runs
    `codesign --verify --deep --strict --verbose=2 Marquee.app`. The build
    fails here if any nested code object is unsigned or invalid — before any
    notary submission is spent. (E5.S2; now also covers the bundled FFmpeg.)
 10. Zips the `.app` (notarytool requires zip / dmg / pkg) and submits to
     Apple with `xcrun notarytool submit --wait`.
-11. Staples the notarization ticket with `xcrun stapler staple`.
-12. Verifies the stapled bundle with `codesign --verify --deep --strict`
+11. Staples the notarization ticket to the `.app` with `xcrun stapler staple`.
+12. Verifies the stapled `.app` with `codesign --verify --deep --strict`
     and `spctl -a -t exec -vv`.
-13. Re-zips the stapled `.app`, uploads it as a workflow artifact, and
-    attaches it to a **draft** GitHub release for the tag (tag-triggered
-    runs only).
+13. **Bundles the DMG from the now-stapled `.app`** (E5.S4):
+    `npm run tauri bundle -- --target aarch64-apple-darwin --bundles dmg`.
+    Tauri re-uses the already-built, stapled `.app` (no recompile), draws the
+    drag-to-Applications window (app icon + `/Applications` alias, positions
+    from `bundle.macOS.dmg` in `tauri.conf.json`), and signs the DMG with the
+    Developer ID identity.
+14. **Notarizes the DMG** directly with `xcrun notarytool submit --wait` (a DMG
+    is submittable as-is, no zip), then staples the ticket with
+    `xcrun stapler staple`.
+15. Verifies the DMG with `codesign --verify`,
+    `spctl -a -t open --context context:primary-signature -vv`, and
+    `xcrun stapler validate` (the `open` assessment type is the one for a
+    downloaded disk image; `stapler validate` confirms first-open works
+    offline).
+16. Re-zips the stapled `.app`, then uploads **both** the `.app` zip and the
+    notarized+stapled DMG as workflow artifacts, and attaches **both** to a
+    **draft** GitHub release for the tag (tag-triggered runs only). The DMG is
+    the primary user-facing download.
 
 ## Triggers
 
 - `push` of a tag matching `v*.*.*` — builds the tag and creates a draft
-  release with the artifact attached.
+  release with the DMG + `.app` zip attached.
 - `workflow_dispatch` — manual runs from the Actions tab, no release
   created. Useful for smoke-testing the pipeline.
 
@@ -90,27 +107,36 @@ git push origin v0.1.0
 ```
 
 Watch the run at <https://github.com/{owner}/slideshow-gen/actions>. On
-success a draft release appears at `Releases` with `Marquee-stapled.zip`
+success a draft release appears at `Releases` with the notarized+stapled
+`Marquee_<version>_aarch64.dmg` (primary download) and `Marquee-stapled.zip`
 attached. Edit and publish the release when ready.
 
 ### Trigger manually (no release)
 
 1. Go to **Actions → Release (sign + notarize) → Run workflow**.
-2. Pick the branch and run. The signed `.app` will be uploaded as an
-   artifact named `Marquee-aarch64-apple-darwin`.
+2. Pick the branch and run. The stapled `.app` zip and the notarized+stapled
+   DMG are uploaded as a single artifact named `Marquee-aarch64-apple-darwin`.
 
 ### Verify locally
 
-After downloading the zip artifact:
+After downloading the DMG from the artifact / release:
 
 ```bash
+# The DMG (primary download)
+codesign --verify --verbose=2 Marquee_<version>_aarch64.dmg
+spctl -a -t open --context context:primary-signature -vv Marquee_<version>_aarch64.dmg
+xcrun stapler validate Marquee_<version>_aarch64.dmg
+
+# The .app inside (or from the zip)
 unzip Marquee-stapled.zip
 codesign --verify --deep --strict --verbose=2 Marquee.app
 spctl -a -t exec -vv Marquee.app
 xcrun stapler validate Marquee.app
 ```
 
-All four should report success and reference the Developer ID identity.
+All should report success and reference the Developer ID identity. (DMGs assess
+with `-t open`, apps with `-t exec` — using the wrong type reports a spurious
+rejection.)
 
 ### Smoke-test the bundled app
 
@@ -120,6 +146,58 @@ All four should report success and reference the Developer ID identity.
    ticket.)
 3. Trigger a small render to confirm the embedded `slideshow-gen` sidecar
    spawns and exits cleanly.
+
+## DMG packaging (E5.S4)
+
+The public download is a **`Marquee_<version>_aarch64.dmg`** — the standard
+macOS drag-to-Applications installer window. Tauri's DMG bundler draws that
+window (app icon on the left, an `/Applications` alias on the right; icon
+positions and window size come from `bundle.macOS.dmg` in `tauri.conf.json`).
+
+### Why the DMG is built AFTER the .app is stapled
+
+The workflow splits bundling into two Tauri invocations:
+
+1. `tauri build … --bundles app` → produces + signs **only** `Marquee.app`.
+2. …notarize + staple the `.app`…
+3. `tauri bundle … --bundles dmg` → wraps the **now-stapled** `.app` into a
+   signed DMG (re-using the built app; no recompile).
+
+If the DMG were built in step 1 alongside the app (the default
+`targets: ["app", "dmg"]` behaviour), it would wrap an **un-stapled** `.app`.
+Building it after stapling means the DMG's inner app already carries its
+notarization ticket, so it works offline the instant the user drags it out —
+before the DMG's own ticket is even consulted.
+
+### Why notarization stays explicit (not Tauri's auto-notarize)
+
+Tauri's bundler *can* notarize automatically when `APPLE_ID` + `APPLE_PASSWORD`
++ `APPLE_TEAM_ID` are set. It did **not** fire in the proven 2026-06-30 run
+(the bundler signed the `.app` and DMG but emitted no notarization/stapling —
+that was done by the explicit `notarytool`/`stapler` steps, and only for the
+`.app`). Rather than depend on behaviour that didn't trigger, the DMG is
+notarized + stapled by the **same explicit `notarytool submit --wait` +
+`stapler staple` steps** proven for the `.app`. A DMG is directly submittable
+to notarytool (no zip wrapper needed).
+
+### Two tickets, belt-and-suspenders
+
+Both the inner `.app` **and** the DMG end up individually notarized and
+stapled. Either alone would satisfy Gatekeeper; doing both means neither the
+downloaded disk image nor the extracted app depends on a network round-trip on
+first open.
+
+### Verifying a DMG
+
+```bash
+codesign --verify --verbose=2 Marquee_<version>_aarch64.dmg
+spctl -a -t open --context context:primary-signature -vv Marquee_<version>_aarch64.dmg
+xcrun stapler validate Marquee_<version>_aarch64.dmg
+```
+
+`spctl -t open` is the assessment type for a downloaded disk image (apps use
+`-t exec`). `stapler validate` confirms the ticket is attached for offline
+first-open.
 
 ## Hardened Runtime & Entitlements (E5.S3)
 

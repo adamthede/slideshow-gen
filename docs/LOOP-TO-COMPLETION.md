@@ -16,21 +16,20 @@ A **notarized, downloadable `Marquee.app`** a user can drag to `/Applications`, 
 - The only remaining human release step: **push a `v*.*.*` tag** — the same workflow runs and attaches the notarized app to a draft GitHub release.
 - `--onefile` deep-signing: resolved (passes; no `--onedir` rewrite needed).
 
-## Current state (2026-07-04, corrected)
-- ~90–95% through the roadmap. **Engine (E0) done.** Epics 1, 2, 4 shipped. **E5.S1** (build/sign/notarize workflow) shipped and **proven live**.
-- **Shipped:** **E5.S2** code-signing hygiene (PR #13, 06-26); **E5.S7** bundled signed FFmpeg (**PR #14, 06-29**); **CI Developer-ID G2 intermediate** (PR #17, 06-30); **E5.S3** hardened runtime + minimal entitlements (PR #16, 07-04).
+## Current state (2026-07-04, S4+S6 PRs open)
+- **~99% through the roadmap.** All engineering for v1.0 is done or in a merge-ready PR. **Engine (E0) done.** Epics 1, 2, 4 shipped. **E5.S1** (build/sign/notarize workflow) shipped and **proven live**.
+- **Shipped (merged):** **E5.S2** code-signing hygiene (PR #13, 06-26); **E5.S7** bundled signed FFmpeg (PR #14, 06-29); **CI Developer-ID G2 intermediate** (PR #17, 06-30); **E5.S3** hardened runtime + minimal entitlements (PR #16, 07-04).
+- **Merge-ready PRs (open, self-reviewed, awaiting Adam):**
+  - **E5.S4 — signed/notarized/stapled DMG** → **PR #18** (`feat/e5-s4-signed-dmg`). The last engineering blocker. Extends the proven workflow: builds the `.app` only, notarizes+staples it, then bundles the DMG from the stapled app, notarizes+staples the DMG, and attaches both to the draft release.
+  - **E5.S6 — release docs (CHANGELOG, RELEASING.md, README install) + entitlements cleanup** → **PR #19** (`feat/e5-s6-release-docs`). Also deletes the orphaned `entitlements.plist` and fixes the stale doc refs.
+  - The two PRs edit different regions of `release-pipeline.md` — **no conflict, merge in either order** (merging #18 first is marginally cleaner since the docs reference the DMG).
 
 ## Ordered remaining path
-1. **E5.S4 - signed/stapled DMG, drag-to-Applications.** ← the only remaining engineering blocker for a public download.
-2. **E5.S6 - release docs / changelog.**
-3. **E5.S5 - Tauri auto-updater** — *consider deferring past v1.0*: with no updater, updates ship as fresh downloads; don't let it gate the first release.
-4. **`v1.0.0` tag push** (Adam, ~5 min) → draft GitHub release with the notarized app.
-5. **thedetech product page** — download link + screenshots; Marquee becomes a published Thede Technologies product.
-- *Queued small follow-up: delete orphaned `desktop/src-tauri/entitlements.plist` + update stale doc refs (README, architecture-app.md, ADR-0002, release-pipeline.md).*
+1. **Merge PR #18 (E5.S4 DMG)** and **PR #19 (E5.S6 docs + cleanup).** Both self-reviewed; bots degraded. → these are the last engineering/docs steps.
+2. **`v1.0.0` tag push** (Adam, ~5 min). Bump `tauri.conf.json` + `package.json` to `1.0.0` first (see `docs/RELEASING.md`), tag `v1.0.0`, push → the workflow builds + notarizes + attaches the DMG to a **draft** GitHub release → publish it.
+3. **thedetech product page** — download link + screenshots; Marquee becomes a published Thede Technologies product. (Separate step, after the release exists.)
+- **E5.S5 — Tauri auto-updater: DEFERRED past v1.0** (by design). With no updater, updates ship as fresh downloads; it does not gate the first release.
 - *Out of scope: Epic 3 (browse/exclude grid) - PRD marks optional; recommend cut. `kburns/` sibling dir = historical prior art, ignore.*
-
-## Queued small tasks
-- **Delete the orphaned `desktop/src-tauri/entitlements.plist`** — E5.S3 (#16) split entitlements into `app-entitlements.plist` + `binary-entitlements.plist`; the old single `entitlements.plist` is now orphaned. Delete it and update the references in `desktop/README.md`, `docs/architecture-app.md`, `docs/adr/0002-sidecar-packaging.md`, and `docs/release-pipeline.md`. Small, do it before S4's DMG work so the DMG doesn't pick up a stale file.
 
 ## Pointers
 - PRD/ADRs/stories: `_bmad-output/planning-artifacts/` · Release pipeline: `docs/release-pipeline.md` · Plan files: `docs/plans-to-do/` & `docs/plans-done/`
