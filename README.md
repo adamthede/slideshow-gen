@@ -2,7 +2,30 @@
 
 Ken Burns slideshow generator with EXIF-aware metadata overlays. Takes directories of images and video files and produces MP4 video slideshows for playback on digital picture frames and computers.
 
-> The Python CLI is the engine. **Marquee** — the macOS desktop app being built on top of it — is in active development. See [`_bmad-output/planning-artifacts/prd.md`](_bmad-output/planning-artifacts/prd.md) and [ADR-0001](docs/adr/0001-app-stack.md).
+> The Python CLI is the engine. **Marquee** — the macOS desktop app built on top of it — wraps this engine with drag-and-drop folders and a single Render button. See [`_bmad-output/planning-artifacts/prd.md`](_bmad-output/planning-artifacts/prd.md) and [ADR-0001](docs/adr/0001-app-stack.md).
+
+## Download Marquee (macOS app)
+
+Marquee is the no-setup way to use this engine: no virtualenv, no `pip`, no
+FFmpeg install, no command line. Just folders in, MP4 out.
+
+**[Download the latest release →](https://github.com/adamthede/slideshow-gen/releases/latest)**
+
+1. Download **`Marquee_<version>_aarch64.dmg`** (Apple Silicon, macOS 12+).
+2. Open the DMG and **drag `Marquee.app` to the `Applications` folder**.
+3. Launch it from Applications.
+
+The app is signed with a Developer ID and notarized by Apple, so it opens
+without the "unidentified developer" block. On first launch macOS may pause
+briefly to verify the notarization ticket — this is normal.
+
+> **If macOS still warns on first open** (e.g. Safari flagged the download):
+> right-click the app in Applications → **Open** → **Open** in the dialog. You
+> only need to do this once. Everything runs 100% offline — no account, no
+> telemetry, no network calls.
+
+The rest of this README covers the **`slideshow-gen` CLI** — the engine Marquee
+wraps. Use it directly if you want scripting, automation, or the full flag set.
 
 ## Features
 
