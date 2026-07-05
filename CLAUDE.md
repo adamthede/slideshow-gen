@@ -36,7 +36,7 @@ Run the suite **scoped to `tests/`** — always:
 pytest tests/          # or: python -m pytest tests/
 ```
 
-Bare `pytest` **fails**: this repo vendors BMAD tooling under `_bmad/` and `_bmad-output/`, and those trees ship their own `test_*.py` self-tests. Unscoped collection discovers them and errors out. There's no `testpaths` in `pyproject.toml`, so the scope has to come from the command.
+Bare `pytest` **fails**: this repo vendors BMAD tooling under `_bmad/` and `_bmad-output/`, and those trees ship their own `test_*.py` self-tests. Unscoped collection discovers them and errors out. There's no `testpaths` in `pyproject.toml`, so today the scope has to come from the command. (A permanent fix would add `testpaths = ["tests"]` under `[tool.pytest.ini_options]` in `pyproject.toml` so bare `pytest` also stays scoped; until that config lands, use the scoped command above.)
 
 The five files in `tests/` cover: file discovery/sorting (`test_discovery.py`), Ken Burns filter expressions (`test_kenburns.py`), FFmpeg binary resolution (`test_ffbin.py`), audio muxing integration (`test_audio_integration.py`), and the `--ipc` sidecar protocol (`test_ipc_protocol.py`).
 
