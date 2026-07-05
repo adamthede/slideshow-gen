@@ -351,6 +351,15 @@ jobs:
           codesign --verify --deep --strict --verbose=2 "${{ steps.locate.outputs.app_path }}"
           spctl -a -t exec -vv "${{ steps.locate.outputs.app_path }}"
 
+      - name: Re-zip stapled .app for release
+        id: zip_final
+        run: |
+          set -euo pipefail
+          APP_PATH="${{ steps.locate.outputs.app_path }}"
+          ZIP_PATH="$RUNNER_TEMP/Marquee-stapled.zip"
+          /usr/bin/ditto -c -k --keepParent "$APP_PATH" "$ZIP_PATH"
+          echo "zip_path=$ZIP_PATH" >> "$GITHUB_OUTPUT"
+
       # ----------------------------------------------------------------------
       # E5.S4 — package the now-stapled .app into a signed, notarized, stapled
       # DMG with the standard drag-to-Applications layout, and attach it to the
@@ -413,15 +422,6 @@ jobs:
           spctl -a -t open --context context:primary-signature -vv "$DMG_PATH"
           xcrun stapler validate "$DMG_PATH"
           echo "DMG is signed, notarized, and stapled."
-
-      - name: Re-zip stapled .app for release
-        id: zip_final
-        run: |
-          set -euo pipefail
-          APP_PATH="${{ steps.locate.outputs.app_path }}"
-          ZIP_PATH="$RUNNER_TEMP/Marquee-stapled.zip"
-          /usr/bin/ditto -c -k --keepParent "$APP_PATH" "$ZIP_PATH"
-          echo "zip_path=$ZIP_PATH" >> "$GITHUB_OUTPUT"
 
       - name: Upload workflow artifacts (.app zip + DMG)
         uses: actions/upload-artifact@v4
