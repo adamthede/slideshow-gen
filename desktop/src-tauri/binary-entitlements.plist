@@ -6,7 +6,7 @@
        Tauri shell — see app-entitlements.plist for that).
 
        WHY disable-library-validation:
-         The PyInstaller --onefile sidecar extracts the PSF-signed
+         The PyInstaller onefile-mode sidecar extracts the PSF-signed
          Python.framework + C-extension dylibs into a temp dir at launch and
          dlopens them. Under the hardened runtime the default policy requires
          all loaded libraries to be signed by the same team as the main binary
