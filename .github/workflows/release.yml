@@ -266,8 +266,15 @@ jobs:
             codesign -dvvv "$bin" 2>&1 | grep -E "Authority|flags|TeamIdentifier" || true
           done
 
-      - name: Build Tauri bundle (signed)
+      - name: Build Tauri bundle — .app only (signed)
         working-directory: desktop
+        # E5.S4 — build ONLY the .app here (`--bundles app`), NOT the DMG. The
+        # DMG is bundled later, AFTER the .app is notarized + stapled, so the
+        # DMG wraps a stapled app (a DMG built now would wrap the un-stapled
+        # .app). We intentionally do NOT rely on Tauri's automatic notarization
+        # (it did not fire in the proven 2026-06-30 run despite these env vars
+        # being set); notarization stays explicit via notarytool below. The
+        # Apple env vars remain here so the bundler signs the .app during build.
         env:
           # Tauri 2.x bundler reads these to sign the .app during the build.
           APPLE_SIGNING_IDENTITY: ${{ env.APPLE_SIGNING_IDENTITY }}
@@ -279,7 +286,7 @@ jobs:
           CI: "true"
         run: |
           security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
-          npm run tauri build -- --target aarch64-apple-darwin
+          npm run tauri build -- --target aarch64-apple-darwin --bundles app
 
       - name: Locate built Marquee.app
         id: locate
@@ -339,10 +346,73 @@ jobs:
       - name: Staple ticket
         run: xcrun stapler staple "${{ steps.locate.outputs.app_path }}"
 
-      - name: Verify signature + Gatekeeper acceptance
+      - name: Verify signature + Gatekeeper acceptance (.app)
         run: |
           codesign --verify --deep --strict --verbose=2 "${{ steps.locate.outputs.app_path }}"
           spctl -a -t exec -vv "${{ steps.locate.outputs.app_path }}"
+
+      # ----------------------------------------------------------------------
+      # E5.S4 — package the now-stapled .app into a signed, notarized, stapled
+      # DMG with the standard drag-to-Applications layout, and attach it to the
+      # draft release. The .app above is already notarized + stapled, so the DMG
+      # wraps a stapled app; then the DMG itself is notarized + stapled so it
+      # passes Gatekeeper offline as a downloaded installer.
+      # ----------------------------------------------------------------------
+      - name: Bundle DMG from the stapled .app (signed)
+        working-directory: desktop
+        # `tauri bundle --bundles dmg` re-uses the already-built + stapled .app
+        # in target/.../release/bundle/macos and produces the DMG (Tauri's DMG
+        # bundler draws the drag-to-Applications window: app icon + /Applications
+        # alias). It signs the DMG with the Developer ID identity (proven in the
+        # 2026-06-30 run). No recompile — this only runs the bundle stage.
+        env:
+          APPLE_SIGNING_IDENTITY: ${{ env.APPLE_SIGNING_IDENTITY }}
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE_P12_BASE64 }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          CI: "true"
+        run: |
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          npm run tauri bundle -- --target aarch64-apple-darwin --bundles dmg
+
+      - name: Locate built DMG
+        id: locate_dmg
+        run: |
+          set -euo pipefail
+          DMG_PATH=$(find desktop/src-tauri/target/aarch64-apple-darwin/release/bundle/dmg -maxdepth 1 -name "Marquee_*_aarch64.dmg" -type f | head -n1)
+          if [ -z "$DMG_PATH" ]; then
+            echo "Marquee DMG not found under bundle/dmg" >&2
+            find desktop/src-tauri/target/aarch64-apple-darwin/release/bundle/dmg -maxdepth 1 -type f -print || true
+            exit 1
+          fi
+          echo "dmg_path=$DMG_PATH" >> "$GITHUB_OUTPUT"
+          echo "Found: $DMG_PATH"
+
+      - name: Notarize the DMG with notarytool
+        # A DMG is directly submittable to notarytool (no zip needed, unlike a
+        # bare .app). --wait blocks until Apple returns a verdict; a non-Accepted
+        # status exits non-zero and fails the job before we staple/attach.
+        run: |
+          xcrun notarytool submit "${{ steps.locate_dmg.outputs.dmg_path }}" \
+            --apple-id "$APPLE_ID" \
+            --team-id "$APPLE_TEAM_ID" \
+            --password "$APPLE_APP_SPECIFIC_PASSWORD" \
+            --wait
+
+      - name: Staple ticket to the DMG
+        run: xcrun stapler staple "${{ steps.locate_dmg.outputs.dmg_path }}"
+
+      - name: Verify DMG signature + Gatekeeper acceptance
+        # DMGs are assessed with `-a` against the primary signature and validate
+        # their stapled ticket. `spctl -t open` is the assessment type for a
+        # downloaded disk image (vs. `-t exec` for an app). `stapler validate`
+        # confirms the ticket is attached so first open works OFFLINE.
+        run: |
+          set -euo pipefail
+          DMG_PATH="${{ steps.locate_dmg.outputs.dmg_path }}"
+          codesign --verify --verbose=2 "$DMG_PATH"
+          spctl -a -t open --context context:primary-signature -vv "$DMG_PATH"
+          xcrun stapler validate "$DMG_PATH"
+          echo "DMG is signed, notarized, and stapled."
 
       - name: Re-zip stapled .app for release
         id: zip_final
@@ -353,20 +423,26 @@ jobs:
           /usr/bin/ditto -c -k --keepParent "$APP_PATH" "$ZIP_PATH"
           echo "zip_path=$ZIP_PATH" >> "$GITHUB_OUTPUT"
 
-      - name: Upload workflow artifact
+      - name: Upload workflow artifacts (.app zip + DMG)
         uses: actions/upload-artifact@v4
         with:
           name: Marquee-aarch64-apple-darwin
-          path: ${{ steps.zip_final.outputs.zip_path }}
+          path: |
+            ${{ steps.zip_final.outputs.zip_path }}
+            ${{ steps.locate_dmg.outputs.dmg_path }}
           if-no-files-found: error
           retention-days: 14
 
       - name: Attach to draft GitHub release (tag pushes only)
+        # The DMG is the primary user-facing download (drag-to-Applications);
+        # the stapled .app zip is attached too for users who prefer it.
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
           draft: true
-          files: ${{ steps.zip_final.outputs.zip_path }}
+          files: |
+            ${{ steps.locate_dmg.outputs.dmg_path }}
+            ${{ steps.zip_final.outputs.zip_path }}
           fail_on_unmatched_files: true
 
       - name: Clean up keychain

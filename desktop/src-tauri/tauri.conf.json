@@ -54,7 +54,12 @@
       "frameworks": [],
       "minimumSystemVersion": "12.0",
       "signingIdentity": "Developer ID Application: ADAM SPENCER THEDE (U85N54PC5J)",
-      "entitlements": "app-entitlements.plist"
+      "entitlements": "app-entitlements.plist",
+      "dmg": {
+        "windowSize": { "width": 660, "height": 400 },
+        "appPosition": { "x": 180, "y": 170 },
+        "applicationFolderPosition": { "x": 480, "y": 170 }
+      }
     }
   }
 }
