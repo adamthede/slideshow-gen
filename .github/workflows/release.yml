@@ -300,6 +300,97 @@ jobs:
           echo "app_path=$APP_PATH" >> "$GITHUB_OUTPUT"
           echo "Found: $APP_PATH"
 
+      - name: Re-sign bundled sidecar with binary entitlements (post-bundle)
+        # THE FIX for the v1.0.0 "Scan kills the engine" bug. Tauri's bundler
+        # re-signs every externalBin during `tauri build` with the entitlements
+        # configured in tauri.conf.json (app-entitlements.plist — intentionally
+        # EMPTY, it's for the shell). That silently strips the
+        # com.apple.security.cs.disable-library-validation entitlement granted
+        # by the "Sign the PyInstaller sidecar" step above, so the shipped
+        # sidecar's hardened runtime rejects the PSF-signed Python.framework it
+        # extracts at launch:
+        #   dyld: "code signature ... not valid for use in process: mapping
+        #   process and mapped file (non-platform) have different Team IDs"
+        # Notarization does not check for stripped entitlements, and a
+        # Gatekeeper double-click only exercises the Tauri shell — which is how
+        # green runs shipped a broken engine. So: re-sign the bundled sidecar
+        # IN PLACE with binary-entitlements.plist AFTER the Tauri build, then
+        # re-seal the outer .app (modifying a nested binary invalidates the
+        # bundle seal). The outer re-sign is deliberately NOT --deep: a deep
+        # re-sign would push the app entitlements back onto every nested
+        # binary — the exact bug being fixed. ffmpeg/ffprobe land in
+        # Contents/Resources, which the bundler does NOT re-sign, so their
+        # pre-bundle signatures (and entitlements) are already intact.
+        env:
+          APPLE_SIGNING_IDENTITY: ${{ env.APPLE_SIGNING_IDENTITY }}
+        run: |
+          # No `set -x`: this step unlocks the keychain with its password.
+          set -euo pipefail
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          APP_PATH="${{ steps.locate.outputs.app_path }}"
+          SIDECAR="$APP_PATH/Contents/MacOS/slideshow-gen"
+          codesign \
+            --force \
+            --options runtime \
+            --timestamp \
+            --entitlements desktop/src-tauri/binary-entitlements.plist \
+            --sign "$APPLE_SIGNING_IDENTITY" \
+            "$SIDECAR"
+          # Re-seal the outer bundle: the sidecar's new signature changed a
+          # sealed nested code object, so the .app signature must be
+          # regenerated — with the same (empty) app entitlements Tauri used
+          # for the shell binary.
+          codesign \
+            --force \
+            --options runtime \
+            --timestamp \
+            --entitlements desktop/src-tauri/app-entitlements.plist \
+            --sign "$APPLE_SIGNING_IDENTITY" \
+            "$APP_PATH"
+          codesign --verify --deep --strict --verbose=2 "$APP_PATH"
+
+      - name: Assert engine entitlements survived bundling (gate, pre-notarize)
+        # REGRESSION GATE for the entitlement stripping fixed above. A report
+        # is a snapshot; only a live check is a gate. This reads the
+        # entitlements ACTUALLY carried by the engine binaries inside the
+        # final .app and hard-fails the job unless disable-library-validation
+        # is present AND true on every one of them — so this class of bug can
+        # never reach notarization (let alone a release) again, even if a
+        # future Tauri upgrade changes what the bundler re-signs. The check
+        # parses the plist for real rather than substring-matching the raw
+        # codesign output: a substring match would false-pass on a key set to
+        # <false/>, and codesign mixes diagnostics into the output streams.
+        # plutil -lint proves the extraction is a parseable plist; PlistBuddy
+        # reads the actual boolean value (dots in the key are literal —
+        # PlistBuddy's keypath separator is ":").
+        run: |
+          set -euo pipefail
+          APP_PATH="${{ steps.locate.outputs.app_path }}"
+          ENTITLEMENT="com.apple.security.cs.disable-library-validation"
+          for bin in \
+            "$APP_PATH/Contents/MacOS/slideshow-gen" \
+            "$APP_PATH/Contents/Resources/ffmpeg" \
+            "$APP_PATH/Contents/Resources/ffprobe"; do
+            echo "--- entitlements of ${bin#"$APP_PATH/"} ---"
+            ENTS_FILE="$(mktemp)"
+            codesign -d --entitlements - --xml "$bin" > "$ENTS_FILE"
+            plutil -lint "$ENTS_FILE"
+            cat "$ENTS_FILE"; echo
+            VALUE="$(/usr/libexec/PlistBuddy -c "Print :$ENTITLEMENT" "$ENTS_FILE" 2>/dev/null || echo "MISSING")"
+            rm -f "$ENTS_FILE"
+            if [ "$VALUE" = "true" ]; then
+              echo "OK: $ENTITLEMENT is true."
+            else
+              echo "FATAL: $ENTITLEMENT is '$VALUE' (want 'true') on $bin." >&2
+              echo "Something re-signed it with different entitlements after the" >&2
+              echo "pre-bundle signing steps (Tauri re-signs externalBin with the" >&2
+              echo "app entitlements) — the post-bundle re-sign step must run" >&2
+              echo "AFTER whatever did this. Do not ship this bundle." >&2
+              exit 1
+            fi
+          done
+          echo "Entitlement gate PASSED: all engine binaries carry $ENTITLEMENT=true."
+
       - name: Deep-verify signing coverage (gate, pre-notarize)
         # E5.S2 — fail the build if ANY nested executable, framework, or dylib
         # inside Marquee.app is unsigned or invalidly signed. This runs AFTER
