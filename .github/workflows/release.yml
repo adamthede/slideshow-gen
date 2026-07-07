@@ -447,7 +447,12 @@ jobs:
           DMG_DIR="desktop/src-tauri/target/aarch64-apple-darwin/release/bundle/dmg"
           DMG_PATH="$DMG_DIR/Marquee_${VERSION}_aarch64.dmg"
           mkdir -p "$DMG_DIR"
-          rm -f "$DMG_PATH"
+          # Remove EVERY Marquee DMG, not just the one at $DMG_PATH: the Cargo
+          # cache restores desktop/src-tauri/target wholesale, so a prior
+          # version's DMG (e.g. after a version bump) can reappear here, and
+          # "Locate built DMG" globs Marquee_*_aarch64.dmg — a stale file
+          # could get notarized and attached instead of the one built now.
+          rm -f "$DMG_DIR"/Marquee_*_aarch64.dmg
           STAGING="$RUNNER_TEMP/dmg-staging"
           rm -rf "$STAGING"
           mkdir -p "$STAGING"
@@ -568,8 +573,11 @@ jobs:
           trap 'hdiutil detach "$MOUNT" >/dev/null 2>&1 || true' EXIT
           xcrun stapler validate "$MOUNT/Marquee.app"
           check_app "$MOUNT/Marquee.app" "dmg"
-          hdiutil detach "$MOUNT"
-          trap - EXIT
+          # Detach is cleanup, not a check — a transient "resource busy"
+          # (Spotlight indexing the fresh mount) must not fail a gate whose
+          # assertions all passed. Retry with -force, then fall through to the
+          # EXIT trap as the final backstop.
+          hdiutil detach "$MOUNT" || { sleep 2; hdiutil detach -force "$MOUNT" || true; }
           echo "FINAL GATE PASSED: both shipped artifacts carry $ENTITLEMENT=true on all engine binaries, and the app inside the DMG is validly stapled."
 
       - name: Upload workflow artifacts (.app zip + DMG)
