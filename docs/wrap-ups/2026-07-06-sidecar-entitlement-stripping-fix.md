@@ -129,3 +129,53 @@ a separate PR.
   `release.yml` — explicitly out of scope here.
 - **No planning file exists for this fix** — `/shipped` creates the stub at
   merge time.
+
+---
+
+# Round 2 (same day): the DMG bundling pass resurrected the bug in one artifact
+
+## Problem
+
+After Round 1 merged and the `v1.0.0` tag was re-pushed, the rebuilt draft
+release was asymmetric: the sidecar inside `Marquee-stapled.zip` carried
+`disable-library-validation`, but the sidecar inside
+`Marquee_1.0.0_aarch64.dmg` had **zero entitlements**. Adam installed from
+the DMG and hit the identical dlopen Team-ID failure.
+
+## Root Cause
+
+`npm run tauri bundle -- --bundles dmg` does not just wrap the existing .app
+— the bundler re-runs its **entire signing pass** first. Run 28766929210's
+log proves it with timestamps: during the DMG step, Tauri logs
+`Signing …/Contents/MacOS/slideshow-gen`, then the shell, then the .app —
+all with the empty app entitlements — before packing the DMG. So the Round 1
+re-sign fix was undone *inside the DMG* (and the .app's staple invalidated),
+while the zip stayed correct only because commit 0228859 had already moved
+zip creation before the DMG step. The Round 1 assertion gate passed honestly
+— against the intermediate .app, which was the wrong artifact to assert.
+
+## What We Did (Round 2)
+
+1. **Replaced the Tauri DMG step with pure hdiutil packaging** — a staging
+   copy (`ditto`) of the notarized + stapled .app plus an `/Applications`
+   symlink, `hdiutil create -format UDZO`, then codesign the DMG. The bundler
+   is never re-entered after signatures are final; the app inside the DMG is
+   byte-identical to the zip's. Trade-off: default Finder layout (no custom
+   icon positions) — cosmetic, deferred to hygiene.
+2. **Moved the assertion gate to the very end** and pointed it at the
+   shipped artifacts: it unzips the final zip and mounts the final DMG, then
+   asserts the parsed entitlement on sidecar/ffmpeg/ffprobe inside **both**,
+   plus `stapler validate` on the app inside the DMG. It runs after all
+   signing/notarization/stapling and before upload/attach.
+
+## Lessons Learned (Round 2)
+
+- **Assert the artifact you ship, not the intermediate.** Round 1's gate was
+  live and honest — and aimed at a bundle that a later step quietly rebuilt.
+  The gate must sit at the last edge before publication.
+- **"Bundlers re-sign" is not a one-time lesson — it re-applies per
+  invocation.** Every `tauri build`/`tauri bundle` call re-signs; the fix is
+  to stop re-entering the bundler, not to chase each pass with another
+  re-sign.
+- **A per-artifact asymmetry is a diagnosis.** zip good + DMG bad immediately
+  isolated the fault to the only step that touches one and not the other.

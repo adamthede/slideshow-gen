@@ -349,48 +349,6 @@ jobs:
             "$APP_PATH"
           codesign --verify --deep --strict --verbose=2 "$APP_PATH"
 
-      - name: Assert engine entitlements survived bundling (gate, pre-notarize)
-        # REGRESSION GATE for the entitlement stripping fixed above. A report
-        # is a snapshot; only a live check is a gate. This reads the
-        # entitlements ACTUALLY carried by the engine binaries inside the
-        # final .app and hard-fails the job unless disable-library-validation
-        # is present AND true on every one of them — so this class of bug can
-        # never reach notarization (let alone a release) again, even if a
-        # future Tauri upgrade changes what the bundler re-signs. The check
-        # parses the plist for real rather than substring-matching the raw
-        # codesign output: a substring match would false-pass on a key set to
-        # <false/>, and codesign mixes diagnostics into the output streams.
-        # plutil -lint proves the extraction is a parseable plist; PlistBuddy
-        # reads the actual boolean value (dots in the key are literal —
-        # PlistBuddy's keypath separator is ":").
-        run: |
-          set -euo pipefail
-          APP_PATH="${{ steps.locate.outputs.app_path }}"
-          ENTITLEMENT="com.apple.security.cs.disable-library-validation"
-          for bin in \
-            "$APP_PATH/Contents/MacOS/slideshow-gen" \
-            "$APP_PATH/Contents/Resources/ffmpeg" \
-            "$APP_PATH/Contents/Resources/ffprobe"; do
-            echo "--- entitlements of ${bin#"$APP_PATH/"} ---"
-            ENTS_FILE="$(mktemp)"
-            codesign -d --entitlements - --xml "$bin" > "$ENTS_FILE"
-            plutil -lint "$ENTS_FILE"
-            cat "$ENTS_FILE"; echo
-            VALUE="$(/usr/libexec/PlistBuddy -c "Print :$ENTITLEMENT" "$ENTS_FILE" 2>/dev/null || echo "MISSING")"
-            rm -f "$ENTS_FILE"
-            if [ "$VALUE" = "true" ]; then
-              echo "OK: $ENTITLEMENT is true."
-            else
-              echo "FATAL: $ENTITLEMENT is '$VALUE' (want 'true') on $bin." >&2
-              echo "Something re-signed it with different entitlements after the" >&2
-              echo "pre-bundle signing steps (Tauri re-signs externalBin with the" >&2
-              echo "app entitlements) — the post-bundle re-sign step must run" >&2
-              echo "AFTER whatever did this. Do not ship this bundle." >&2
-              exit 1
-            fi
-          done
-          echo "Entitlement gate PASSED: all engine binaries carry $ENTITLEMENT=true."
-
       - name: Deep-verify signing coverage (gate, pre-notarize)
         # E5.S2 — fail the build if ANY nested executable, framework, or dylib
         # inside Marquee.app is unsigned or invalidly signed. This runs AFTER
@@ -453,26 +411,67 @@ jobs:
 
       # ----------------------------------------------------------------------
       # E5.S4 — package the now-stapled .app into a signed, notarized, stapled
-      # DMG with the standard drag-to-Applications layout, and attach it to the
-      # draft release. The .app above is already notarized + stapled, so the DMG
-      # wraps a stapled app; then the DMG itself is notarized + stapled so it
-      # passes Gatekeeper offline as a downloaded installer.
+      # DMG and attach it to the draft release. The .app above is already
+      # notarized + stapled, so the DMG wraps a stapled app; then the DMG
+      # itself is notarized + stapled so it passes Gatekeeper offline as a
+      # downloaded installer.
+      #
+      # v1.0.0 POSTMORTEM, ROUND 2: this step previously ran
+      # `npm run tauri bundle -- --bundles dmg`. That does NOT just wrap the
+      # existing .app — the bundler re-runs its ENTIRE signing pass first
+      # (proven in run 28766929210's log: "Signing …/Contents/MacOS/
+      # slideshow-gen" during the DMG pass), re-signing every externalBin with
+      # the EMPTY app entitlements and re-sealing the .app. That stripped the
+      # sidecar's disable-library-validation inside the DMG — resurrecting the
+      # original "Scan kills the engine" bug in one artifact — and invalidated
+      # the .app's staple. The zip asset stayed correct only because it was
+      # created before this step. Rule encoded here: NEVER re-enter the Tauri
+      # bundler after signatures are final. Build the DMG with hdiutil (pure
+      # macOS — no third-party downloads on this secrets-bearing runner) from
+      # a staging copy of the stapled app + an /Applications symlink.
+      # Trade-off: default Finder layout instead of Tauri's custom icon
+      # positions — cosmetic only; restoring layout polish is follow-up
+      # hygiene, correctness is not negotiable.
       # ----------------------------------------------------------------------
-      - name: Bundle DMG from the stapled .app (signed)
-        working-directory: desktop
-        # `tauri bundle --bundles dmg` re-uses the already-built + stapled .app
-        # in target/.../release/bundle/macos and produces the DMG (Tauri's DMG
-        # bundler draws the drag-to-Applications window: app icon + /Applications
-        # alias). It signs the DMG with the Developer ID identity (proven in the
-        # 2026-06-30 run). No recompile — this only runs the bundle stage.
+      - name: Package DMG from the stapled .app (hdiutil, no bundler)
         env:
           APPLE_SIGNING_IDENTITY: ${{ env.APPLE_SIGNING_IDENTITY }}
-          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE_P12_BASE64 }}
-          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-          CI: "true"
         run: |
+          # No `set -x`: this step unlocks the keychain with its password.
+          set -euo pipefail
           security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
-          npm run tauri bundle -- --target aarch64-apple-darwin --bundles dmg
+          APP_PATH="${{ steps.locate.outputs.app_path }}"
+          # Same name + directory Tauri's bundler used, so "Locate built DMG"
+          # and every downstream step keep working unchanged.
+          VERSION="$(python3 -c "import json; print(json.load(open('desktop/src-tauri/tauri.conf.json'))['version'])")"
+          DMG_DIR="desktop/src-tauri/target/aarch64-apple-darwin/release/bundle/dmg"
+          DMG_PATH="$DMG_DIR/Marquee_${VERSION}_aarch64.dmg"
+          mkdir -p "$DMG_DIR"
+          # Remove EVERY Marquee DMG, not just the one at $DMG_PATH: the Cargo
+          # cache restores desktop/src-tauri/target wholesale, so a prior
+          # version's DMG (e.g. after a version bump) can reappear here, and
+          # "Locate built DMG" globs Marquee_*_aarch64.dmg — a stale file
+          # could get notarized and attached instead of the one built now.
+          rm -f "$DMG_DIR"/Marquee_*_aarch64.dmg
+          STAGING="$RUNNER_TEMP/dmg-staging"
+          rm -rf "$STAGING"
+          mkdir -p "$STAGING"
+          # ditto preserves the bundle byte-for-byte — signatures AND the
+          # stapled notarization ticket (Contents/CodeResources) included, so
+          # the app inside the DMG is the exact stapled app.
+          /usr/bin/ditto "$APP_PATH" "$STAGING/Marquee.app"
+          ln -s /Applications "$STAGING/Applications"
+          hdiutil create \
+            -volname "Marquee" \
+            -srcfolder "$STAGING" \
+            -fs HFS+ \
+            -format UDZO \
+            -ov \
+            "$DMG_PATH"
+          # Sign the DMG itself — the primary signature Gatekeeper assesses
+          # for a downloaded disk image. DMG signatures take no entitlements.
+          codesign --force --timestamp --sign "$APPLE_SIGNING_IDENTITY" "$DMG_PATH"
+          codesign --verify --verbose=2 "$DMG_PATH"
 
       - name: Locate built DMG
         id: locate_dmg
@@ -513,6 +512,73 @@ jobs:
           spctl -a -t open --context context:primary-signature -vv "$DMG_PATH"
           xcrun stapler validate "$DMG_PATH"
           echo "DMG is signed, notarized, and stapled."
+
+      - name: Assert engine entitlements in the SHIPPED artifacts (final gate)
+        # THE regression gate, round 2. Round 1 asserted the intermediate .app
+        # right after the Tauri build — and the later DMG bundling pass
+        # re-stripped the sidecar inside the DMG, so a green gate still shipped
+        # a broken DMG while the zip stayed good. Lesson encoded here: ASSERT
+        # THE ARTIFACT YOU SHIP, NOT THE INTERMEDIATE. This step runs LAST,
+        # after all signing/notarization/stapling, immediately before
+        # upload/attach — nothing is uploaded or attached if it fails.
+        # It opens BOTH release artifacts — unzips the stapled zip, mounts the
+        # final DMG — and asserts that the sidecar, ffmpeg, and ffprobe inside
+        # each carry disable-library-validation, parsed for real (plutil -lint
+        # + PlistBuddy == true; a substring match would false-pass on
+        # <false/>). It also stapler-validates the app inside the DMG, proving
+        # the DMG wraps the exact notarized + stapled bytes.
+        run: |
+          set -euo pipefail
+          ENTITLEMENT="com.apple.security.cs.disable-library-validation"
+
+          check_app() {
+            local app="$1" label="$2" rel bin ents_file value
+            for rel in Contents/MacOS/slideshow-gen Contents/Resources/ffmpeg Contents/Resources/ffprobe; do
+              bin="$app/$rel"
+              echo "--- [$label] entitlements of $rel ---"
+              ents_file="$(mktemp)"
+              codesign -d --entitlements - --xml "$bin" > "$ents_file"
+              plutil -lint "$ents_file"
+              cat "$ents_file"; echo
+              value="$(/usr/libexec/PlistBuddy -c "Print :$ENTITLEMENT" "$ents_file" 2>/dev/null || echo "MISSING")"
+              rm -f "$ents_file"
+              if [ "$value" = "true" ]; then
+                echo "OK [$label]: $ENTITLEMENT is true on $rel."
+              else
+                echo "FATAL [$label]: $ENTITLEMENT is '$value' (want 'true') on $rel." >&2
+                echo "A later step re-signed this binary after the post-bundle" >&2
+                echo "re-sign fix ran (the v1.0.0 DMG bug shape). Do not ship" >&2
+                echo "this artifact." >&2
+                exit 1
+              fi
+            done
+          }
+
+          # Artifact 1: the stapled .app zip.
+          ZIP_PATH="${{ steps.zip_final.outputs.zip_path }}"
+          UNZIP_DIR="$RUNNER_TEMP/final-gate-zip"
+          rm -rf "$UNZIP_DIR"
+          mkdir -p "$UNZIP_DIR"
+          /usr/bin/ditto -x -k "$ZIP_PATH" "$UNZIP_DIR"
+          check_app "$UNZIP_DIR/Marquee.app" "zip"
+
+          # Artifact 2: the final DMG — mounted read-only, checked in place.
+          # The EXIT trap guarantees the image is detached even when a check
+          # fails mid-step (set -e), so the runner never holds a stale mount.
+          DMG_PATH="${{ steps.locate_dmg.outputs.dmg_path }}"
+          MOUNT="$RUNNER_TEMP/final-gate-dmg"
+          rm -rf "$MOUNT"
+          mkdir -p "$MOUNT"
+          hdiutil attach "$DMG_PATH" -readonly -nobrowse -noautoopen -mountpoint "$MOUNT"
+          trap 'hdiutil detach "$MOUNT" >/dev/null 2>&1 || true' EXIT
+          xcrun stapler validate "$MOUNT/Marquee.app"
+          check_app "$MOUNT/Marquee.app" "dmg"
+          # Detach is cleanup, not a check — a transient "resource busy"
+          # (Spotlight indexing the fresh mount) must not fail a gate whose
+          # assertions all passed. Retry with -force, then fall through to the
+          # EXIT trap as the final backstop.
+          hdiutil detach "$MOUNT" || { sleep 2; hdiutil detach -force "$MOUNT" || true; }
+          echo "FINAL GATE PASSED: both shipped artifacts carry $ENTITLEMENT=true on all engine binaries, and the app inside the DMG is validly stapled."
 
       - name: Upload workflow artifacts (.app zip + DMG)
         uses: actions/upload-artifact@v4
