@@ -22,5 +22,14 @@ build/
 
 # PyInstaller (sidecar freezing in CI)
 *.spec
+# ...except the sidecar spec, which the build genuinely needs. It was tracked
+# despite the rule above; this makes that intentional rather than accidental.
+!desktop/scripts/slideshow-gen.spec
 desktop/src-tauri/binaries/
-.claude/
+
+# Agent tooling. The vendored BMAD skills under .claude/skills/ ARE tracked
+# deliberately (see THIRD-PARTY-LICENSES.md); everything else here is local.
+# Note: .claude/settings.local.json is still tracked from before this rule
+# existed. Git ignores only untracked files, so the rule does not untrack it.
+.claude/*
+!.claude/skills/

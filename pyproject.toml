@@ -25,3 +25,8 @@ dev = [
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/slideshow_gen"]
+
+[tool.pytest.ini_options]
+# The vendored BMAD trees under _bmad/ and _bmad-output/ ship their own
+# test_*.py self-tests. Without this, bare `pytest` collects them and errors.
+testpaths = ["tests"]
