@@ -1,7 +1,7 @@
 # Design pass — applying data-as-design to Marquee
 
 **Status:** Planned. Not yet started.
-**Source aesthetic:** `/Users/adam_thede/Documents/Code/Project - Lifeslice Rewrite/LifesliceRedux/docs/design-principles.md` (Adam's "data-as-design" principles, applied across his apps)
+**Source aesthetic:** the "data-as-design" principles applied across Thede Technologies apps. The source `design-principles.md` lives in a separate repo and is not vendored here.
 **Companion docs:** [ADR-0001](adr/0001-app-stack.md) (stack), [PRD](../_bmad-output/planning-artifacts/prd.md) (epics)
 **Date filed:** 2026-05-25
 

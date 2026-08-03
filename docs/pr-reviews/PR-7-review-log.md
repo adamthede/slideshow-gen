@@ -30,7 +30,7 @@
 
 ## Cycle 1 — 2026-05-28 22:37
 
-**Worktree:** `/Users/adam_thede/Documents/Code/Project - Slideshow Generator/slideshow-gen/.claude/worktrees/agent-a9c690d3a6942366d`
+**Worktree:** `.claude/worktrees/agent-a9c690d3a6942366d` (repo-relative)
 
 ### Pre-Review Snapshot
 - **Files changed:** 4 (410+ / 0-)
@@ -100,7 +100,7 @@ Message: fix: Address PR review cycle 1 — sidecar entry shim, base64 decode, t
 
 ## Cycle 2 — 2026-05-28 22:50
 
-**Worktree:** `/Users/adam_thede/Documents/Code/Project - Slideshow Generator/slideshow-gen/.claude/worktrees/agent-a9c690d3a6942366d`
+**Worktree:** `.claude/worktrees/agent-a9c690d3a6942366d` (repo-relative)
 
 ### Actioned (0)
 No T1 or T2 items this cycle.
