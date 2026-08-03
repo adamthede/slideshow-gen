@@ -27,9 +27,10 @@ build/
 !desktop/scripts/slideshow-gen.spec
 desktop/src-tauri/binaries/
 
-# Agent tooling. The vendored BMAD skills under .claude/skills/ ARE tracked
-# deliberately (see THIRD-PARTY-LICENSES.md); everything else here is local.
-# Note: .claude/settings.local.json is still tracked from before this rule
-# existed. Git ignores only untracked files, so the rule does not untrack it.
+# Agent tooling. The vendored BMAD framework (_bmad/) and its installer-generated
+# skills (.claude/skills/) are dev-time scaffolding, not product code — they stay
+# on the developer's disk and out of the tracked tree. settings.local.json is the
+# one file here that IS the project's own config, so it stays tracked.
+_bmad/
 .claude/*
-!.claude/skills/
+!.claude/settings.local.json

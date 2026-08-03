@@ -168,10 +168,11 @@ extend to third-party components distributed alongside it:
   reaches the FFmpeg binary rather than Marquee's own code. The full GPL v3 text
   and a written offer for corresponding source ship inside the app and are
   recorded in [`THIRD-PARTY-LICENSES.md`](THIRD-PARTY-LICENSES.md).
-- **BMAD METHOD** (MIT, Copyright (c) 2025 BMad Code, LLC) is vendored under
-  `_bmad/` and `.claude/skills/` as development-time agent tooling. It is not
-  part of the app. Its license is reproduced in [`_bmad/LICENSE`](_bmad/LICENSE)
-  and `.claude/skills/LICENSE`.
+- **BMAD METHOD** (MIT, Copyright (c) 2025 BMad Code, LLC) was vendored under
+  `_bmad/` and `.claude/skills/` as development-time agent tooling. It was never
+  part of the app, and as of 2026-08-03 it is no longer tracked here - but it
+  stays reachable in this repository's git history, so its license is reproduced
+  in full in [`THIRD-PARTY-LICENSES.md`](THIRD-PARTY-LICENSES.md).
 
 See [`THIRD-PARTY-LICENSES.md`](THIRD-PARTY-LICENSES.md) for the full
 attribution record.
