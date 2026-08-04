@@ -5,6 +5,11 @@ Marquee (by Thede Technologies, LLC) bundles third-party software. This file
 documents that software and its license obligations. It ships inside the app at
 Marquee.app/Contents/Resources/THIRD-PARTY/.
 
+Marquee's own code is licensed under the MIT License, Copyright (c) 2026 Thede
+Technologies, LLC. That license covers only the code authored by Thede
+Technologies, LLC and makes no claim over the third-party software below, which
+remains under its own license held by its own copyright holder.
+
 
 FFmpeg
 ------

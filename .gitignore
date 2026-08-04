@@ -22,5 +22,15 @@ build/
 
 # PyInstaller (sidecar freezing in CI)
 *.spec
+# ...except the sidecar spec, which the build genuinely needs. It was tracked
+# despite the rule above; this makes that intentional rather than accidental.
+!desktop/scripts/slideshow-gen.spec
 desktop/src-tauri/binaries/
-.claude/
+
+# Agent tooling. The vendored BMAD framework (_bmad/) and its installer-generated
+# skills (.claude/skills/) are dev-time scaffolding, not product code — they stay
+# on the developer's disk and out of the tracked tree. settings.local.json is the
+# one file here that IS the project's own config, so it stays tracked.
+_bmad/
+.claude/*
+!.claude/settings.local.json
