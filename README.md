@@ -23,7 +23,7 @@ and [ADR-0001](docs/adr/0001-app-stack.md).
 Marquee is the no-setup way to use this engine: no virtualenv, no `pip`, no
 FFmpeg install, no command line. Just folders in, MP4 out.
 
-![Marquee after a render: the finished slideshow previewing inside the app, with duration, file size, and render time up top and the pre-render summary below](docs/images/marquee-result.png)
+![Marquee after a render: the finished slideshow previewing inside the app, with duration, file size, item count, and render time up top and the pre-render summary below](docs/images/marquee-result.png)
 
 **[Download the latest release →](https://github.com/adamthede/slideshow-gen/releases/latest)**
 

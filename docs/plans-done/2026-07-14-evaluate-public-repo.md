@@ -5,7 +5,7 @@ priority: "P3"
 project: "slideshow-gen"
 created: 2026-07-14
 completed: 2026-08-13
-linked_pr: "https://github.com/adamthede/slideshow-gen/pull/25"
+linked_pr: "https://github.com/adamthede/slideshow-gen/pull/26"
 effort: "~0.5d evaluation + whatever the history audit demands"
 ---
 
@@ -40,7 +40,7 @@ Option 2 first: it ships public distribution this window with zero risk (product
 
 How each checklist item closed:
 
-- **Git history scrub:** the 2026-08-03 public-readiness scan (`command-center/docs/research/2026-08-03-marquee-public-readiness.md`) swept all 205 commits on all branches — zero credentials, zero personal media. Re-verified 2026-08-13 across all 212 commits (including the post-scan remediation commits) before the flip. Verdict both times: history clean, no rewrite needed. Known accepted residual: absolute personal paths in three docs' *history* (stripped at HEAD in PR #25), including the old `design-pass.md` line referencing a then-private project path.
+- **Git history scrub:** the 2026-08-03 public-readiness scan (`command-center/docs/research/2026-08-03-marquee-public-readiness.md`) swept the full history — the scan reports 205 commits, 28 MB of patch text, all branches — zero credentials, zero personal media. Re-verified 2026-08-13 across all 212 commits then reachable from any ref (main plus the stale unmerged side branches) before the flip. Verdict both times: history clean, no rewrite needed. Known accepted residual: absolute personal paths in three docs' *history* (stripped at HEAD in PR #25), including the old `design-pass.md` line referencing a then-private project path.
 - **License choice:** MIT, `Copyright (c) 2026 Thede Technologies, LLC` — shipped in PR #25 with BMAD attribution (vendored trees) and the FFmpeg GPL posture intact. GitHub detects the license correctly.
 - **README as landing page:** truth pass in PR #25 (dropped "private, all rights reserved", added Download quickstart and Support sections); product screenshot added in the follow-up README PR. Product copy leads at thedetech.com/marquee/ per the venue rule.
 - **Support posture:** no-SLA hobby-project stance stated in the README Support section.
