@@ -1,6 +1,7 @@
 ---
 title: Design pass #2/#4 — Summary section polish (de-card + inline glyphs)
-status: QA Needed
+status: Done
+completed: 2026-05-30
 linked_pr: "https://github.com/adamthede/slideshow-gen/pull/9"
 ---
 

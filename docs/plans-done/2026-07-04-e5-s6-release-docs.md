@@ -1,6 +1,7 @@
 ---
 title: Epic 5.S6 — Release docs, changelog, README install (+ entitlements cleanup)
-status: "QA Needed"
+status: "Done"
+completed: 2026-07-05
 linked_pr: "https://github.com/adamthede/slideshow-gen/pull/19"
 impl-model: opus
 ---

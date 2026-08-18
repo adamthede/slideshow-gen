@@ -1,6 +1,7 @@
 ---
 title: Epic 5.S4 — Signed, notarized, stapled DMG with drag-to-Applications
-status: "QA Needed"
+status: "Done"
+completed: 2026-07-05
 linked_pr: "https://github.com/adamthede/slideshow-gen/pull/18"
 impl-model: opus
 ---
